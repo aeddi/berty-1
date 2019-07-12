@@ -23,7 +23,7 @@ import static android.bluetooth.BluetoothGatt.GATT_SUCCESS;
 import static android.bluetooth.BluetoothGatt.GATT_WRITE_NOT_PERMITTED;
 
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-public class GattClient extends BluetoothGattCallback {
+class GattClient extends BluetoothGattCallback {
     private static final String TAG = "gatt_client";
 
     GattClient() { super(); }

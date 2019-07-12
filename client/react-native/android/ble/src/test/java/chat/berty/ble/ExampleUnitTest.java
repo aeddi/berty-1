@@ -1,7 +1,5 @@
 package chat.berty.ble;
 
-import org.junit.Test;
-
 import static org.junit.Assert.*;
 
 /**

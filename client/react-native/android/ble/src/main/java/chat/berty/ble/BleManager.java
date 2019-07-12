@@ -33,10 +33,10 @@ import java.util.UUID;
 
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
 public final class BleManager {
-    private static String TAG = "ble_manager";
+    private static final String TAG = "ble_manager";
 
-    // TODO: Get rid of this and make a proper react-native module that extends ReactContextBaseJavaModule
-    // See https://facebook.github.io/react-native/docs/native-modules-android
+    // TODO: Get rid of this and make a proper context setter
+    // For RN see: https://facebook.github.io/react-native/docs/native-modules-android
     private static ActivityAndContextGetter activityAndContextGetter;
     private static Object reactContext;
 
@@ -68,19 +68,19 @@ public final class BleManager {
     private static boolean advertising;
     private static boolean scanning;
 
-    private static GattServer mGattServerCallback = new GattServer();
-    private static Advertiser mAdvertisingCallback = new Advertiser();
-    private static GattClient mGattCallback = new GattClient();
-    private static Scanner mScanCallback = new Scanner();
+    private static final GattServer mGattServerCallback = new GattServer();
+    private static final Advertiser mAdvertisingCallback = new Advertiser();
+    private static final GattClient mGattCallback = new GattClient();
+    private static final Scanner mScanCallback = new Scanner();
 
-    private static BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-    private static BluetoothLeAdvertiser mBluetoothLeAdvertiser = mBluetoothAdapter.getBluetoothLeAdvertiser();
-    private static BluetoothLeScanner mBluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
+    private static final BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+    private static final BluetoothLeAdvertiser mBluetoothLeAdvertiser = mBluetoothAdapter.getBluetoothLeAdvertiser();
+    private static final BluetoothLeScanner mBluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
 
-    static final int BLUETOOTH_ENABLE_REQUEST = 42;
-    static final int LOCATION_PERMISSION_REQUEST = 24;
+    private static final int BLUETOOTH_ENABLE_REQUEST = 42;
+    private static final int LOCATION_PERMISSION_REQUEST = 24;
 
-    static final UUID SERVICE_UUID = UUID.fromString("A06C6AB8-886F-4D56-82FC-2CF8610D6664");
+    static final UUID SERVICE_UUID = UUID.fromString("A06C6AB8-886F-4D56-82FC-2CF8610D6665");
     static final UUID WRITER_UUID = UUID.fromString("000CBD77-8D30-4EFF-9ADD-AC5F10C2CC1C");
     static final UUID MA_UUID = UUID.fromString("9B827770-DC72-4C55-B8AE-0870C7AC15A8");
     static final UUID PEER_ID_UUID = UUID.fromString("0EF50D30-E208-4315-B323-D05E0A23E6B3");
@@ -90,10 +90,6 @@ public final class BleManager {
     private static final BluetoothGattCharacteristic maCharacteristic = new BluetoothGattCharacteristic(MA_UUID, PROPERTY_WRITE, PERMISSION_WRITE);
     private static final BluetoothGattCharacteristic peerIDCharacteristic = new BluetoothGattCharacteristic(PEER_ID_UUID, PROPERTY_WRITE, PERMISSION_WRITE);
     private static final BluetoothGattCharacteristic writerCharacteristic = new BluetoothGattCharacteristic(WRITER_UUID, PROPERTY_WRITE, PERMISSION_WRITE);
-
-    private BleManager() {
-        Log.d(TAG, "BleManager constructor called");
-    }
 
     // Setters
     static void setAdvertisingState(boolean state) {
@@ -125,7 +121,7 @@ public final class BleManager {
         return bluetoothReady;
     }
 
-    static boolean isAdvertising() {
+    private static boolean isAdvertising() {
         if (!advertising) {
             Log.d(TAG, "Not currently advertising");
         }
@@ -142,9 +138,6 @@ public final class BleManager {
     }
 
 
-    // Bluetooth service related
-    // TODO: Check return in libp2p
-    // public static boolean initBluetoothService() {
     public static boolean startBleDriver(String multiAddr, String peerID) {
         Log.d(TAG, "startBleDriver() called");
         Activity activity = activityAndContextGetter.getCurrentActivity();
@@ -201,8 +194,6 @@ public final class BleManager {
         return false;
     }
 
-    // TODO: Check return in libp2p
-    // public static boolean closeBluetoothService() {
     public static boolean stopBleDriver() {
         Log.d(TAG, "stopBleDriver() called");
 
@@ -243,7 +234,7 @@ public final class BleManager {
             return false;
         }
 
-        AdvertiseSettings settings = Advertiser.buildAdvertiseSettings(true, AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY, AdvertiseSettings.ADVERTISE_TX_POWER_HIGH, 0);
+        AdvertiseSettings settings = Advertiser.buildAdvertiseSettings();
         AdvertiseData data = Advertiser.buildAdvertiseData();
 
         mBluetoothLeAdvertiser.startAdvertising(settings, data, mAdvertisingCallback);

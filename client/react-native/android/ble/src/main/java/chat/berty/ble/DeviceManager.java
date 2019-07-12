@@ -119,11 +119,7 @@ final class DeviceManager {
 
         BertyDevice bertyDevice = getDeviceFromMultiAddr(multiAddr);
 
-        if (bertyDevice != null) {
-            return true;
-        }
-
-        return false;
+        return bertyDevice != null;
 
     }
 
@@ -132,10 +128,7 @@ final class DeviceManager {
 
         BertyDevice bertyDevice = getDeviceFromMultiAddr(multiAddr);
 
-        if (bertyDevice != null && bertyDevice.isGattConnected()) {
-            return true;
-        }
+        return bertyDevice != null && bertyDevice.isGattConnected();
 
-        return false;
     }
 }

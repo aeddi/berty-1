@@ -59,8 +59,8 @@ class BertyDevice {
 
     // GATT connection attributes
     private BluetoothGatt dGatt;
-    private BluetoothDevice dDevice;
-    private String dAddr;
+    private final BluetoothDevice dDevice;
+    private final String dAddr;
     private int dMtu;
 
     private static final int DEFAULT_MTU = 23; // See https://chromium.googlesource.com/aosp/platform/system/bt/+/29e794418452c8b35c2d42fe0cda81acd86bbf43/stack/include/gatt_api.h#133
@@ -78,12 +78,12 @@ class BertyDevice {
     private boolean identified;
 
     // Semaphores / latch / buffer used for async connection / write operation / infos receptions
-    CountDownLatch infosReceived = new CountDownLatch(2); // Latch for MultiAddr and PeerID reception from remote device
-    Semaphore waitServiceCheck = new Semaphore(0); // Lock for callback that check discovered services
-    Semaphore waitWriteDone = new Semaphore(1); // Lock for waiting completion of write operation
+    final CountDownLatch infosReceived = new CountDownLatch(2); // Latch for MultiAddr and PeerID reception from remote device
+    final Semaphore waitServiceCheck = new Semaphore(0); // Lock for callback that check discovered services
+    final Semaphore waitWriteDone = new Semaphore(1); // Lock for waiting completion of write operation
 
-    private Semaphore lockConnAttempt = new Semaphore(1); // Lock to prevent more than one GATT connection attempt at once
-    private Semaphore lockHandshakeAttempt = new Semaphore(1); // Lock to prevent more than one handshake attempt at once
+    private final Semaphore lockConnAttempt = new Semaphore(1); // Lock to prevent more than one GATT connection attempt at once
+    private final Semaphore lockHandshakeAttempt = new Semaphore(1); // Lock to prevent more than one handshake attempt at once
 
     private final List<byte[]> toSend = new ArrayList<>();
 
@@ -140,73 +140,70 @@ class BertyDevice {
         Log.d(TAG, "asyncConnectionToDevice() called for device: " + dDevice + ", caller: " + caller);
 
         if (lockConnAttempt.tryAcquire()) {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    Thread.currentThread().setName("asyncConnectionToDevice() " + dDevice + ", caller: " + caller);
+            new Thread(() -> {
+                Thread.currentThread().setName("asyncConnectionToDevice() " + dDevice + ", caller: " + caller);
 
-                    String callerAndThread = caller + ", thread: " + Thread.currentThread().getId();
-                    Log.i(TAG, "asyncConnectionToDevice() try to connect GATT with device: " + dDevice + ", caller: " + callerAndThread);
+                String callerAndThread = caller + ", thread: " + Thread.currentThread().getId();
+                Log.i(TAG, "asyncConnectionToDevice() try to connect GATT with device: " + dDevice + ", caller: " + callerAndThread);
 
-                    try {
-                        if (connectGatt(callerAndThread)) {
-                            Thread.sleep(waitAfterHandshakeAndGattConnectAttempt);
-                            lockConnAttempt.release(); // Released now because it could be useful to reconnect during handshake
+                try {
+                    if (connectGatt(callerAndThread)) {
+                        Thread.sleep(waitAfterHandshakeAndGattConnectAttempt);
+                        lockConnAttempt.release(); // Released now because it could be useful to reconnect during handshake
 
-                            if (!identified) {
-                                if (lockHandshakeAttempt.tryAcquire()) {
-                                    Log.i(TAG, "asyncConnectionToDevice() try to Berty handshake with device: " + dDevice + ", caller: " + callerAndThread);
+                        if (!identified) {
+                            if (lockHandshakeAttempt.tryAcquire()) {
+                                Log.i(TAG, "asyncConnectionToDevice() try to Berty handshake with device: " + dDevice + ", caller: " + callerAndThread);
 
-                                    if (bertyHandshake(callerAndThread)) {
-                                        Log.i(TAG, "asyncConnectionToDevice() succeeded with device: " + dDevice + ", MultiAddr: " + dMultiAddr + ", PeerID: " + dPeerID + ", caller: " + callerAndThread);
-                                        identified = true;
+                                if (bertyHandshake(callerAndThread)) {
+                                    Log.i(TAG, "asyncConnectionToDevice() succeeded with device: " + dDevice + ", MultiAddr: " + dMultiAddr + ", PeerID: " + dPeerID + ", caller: " + callerAndThread);
+                                    identified = true;
 
-                                        if (dMtu == DEFAULT_MTU) {
-                                            Log.i(TAG, "asyncConnectionToDevice() try to agree on a new MTU with device: " + dDevice + ", caller: " + callerAndThread);
-                                            dGatt.requestMtu(MAXIMUM_MTU);
-                                        }
+                                    if (dMtu == DEFAULT_MTU) {
+                                        Log.i(TAG, "asyncConnectionToDevice() try to agree on a new MTU with device: " + dDevice + ", caller: " + callerAndThread);
+                                        dGatt.requestMtu(MAXIMUM_MTU);
+                                        try {
+                                            Thread.sleep(300); // Wait for new MTU before starting the libp2p connect
+                                        } catch (final InterruptedException e) {}
+                                    }
 
-                                        if (Core.handlePeerFound(dPeerID, dMultiAddr)) {
-                                            Log.i(TAG, "asyncConnectionToDevice() peer handled successfully by golang with device: " + dDevice + ", caller: " + callerAndThread);
-                                        } else {
-                                            Log.e(TAG, "asyncConnectionToDevice() failed: golang can't handle new peer for device: " + dDevice + ", caller: " + callerAndThread);
-                                            disconnectFromDevice("Berty handshake failed, caller: " + callerAndThread);
-                                        }
+                                    if (Core.handlePeerFound(dPeerID, dMultiAddr)) {
+                                        Log.i(TAG, "asyncConnectionToDevice() peer handled successfully by golang with device: " + dDevice + ", caller: " + callerAndThread);
                                     } else {
-                                        Log.d(TAG, "asyncConnectionToDevice() Berty handshake failed with device: " + dDevice + ", caller: " + callerAndThread);
+                                        Log.e(TAG, "asyncConnectionToDevice() failed: golang can't handle new peer for device: " + dDevice + ", caller: " + callerAndThread);
                                         disconnectFromDevice("Berty handshake failed, caller: " + callerAndThread);
                                     }
-                                    Thread.sleep(waitAfterHandshakeAndGattConnectAttempt);
-                                    lockHandshakeAttempt.release();
                                 } else {
-                                    Log.d(TAG, "asyncConnectionToDevice() skipped Berty handshake: already running for device: " + dDevice);
+                                    Log.d(TAG, "asyncConnectionToDevice() Berty handshake failed with device: " + dDevice + ", caller: " + callerAndThread);
+                                    disconnectFromDevice("Berty handshake failed, caller: " + callerAndThread);
                                 }
+                                Thread.sleep(waitAfterHandshakeAndGattConnectAttempt);
+                                lockHandshakeAttempt.release();
                             } else {
-                                Log.i(TAG, "asyncConnectionToDevice() GATT reconnection succeeded for device: " + dDevice + ", caller: " + callerAndThread);
+                                Log.d(TAG, "asyncConnectionToDevice() skipped Berty handshake: already running for device: " + dDevice);
                             }
                         } else {
-                            if (identified) {
-                                Log.e(TAG, "asyncConnectionToDevice() reconnection failed: connection lost with previously connected device: " + dDevice + ", MultiAddr: " + dMultiAddr + ", PeerID: " + dPeerID + ", caller: " + callerAndThread);
-                                // TODO: Check with sfroment if it's ok to use connClosed that way
-                                // TODO: Check with sfroment how libp2p handle a reconnection with a different mac address
-                                Core.connClosedWithDevice(dMultiAddr);
-                            } else {
-                                Log.e(TAG, "asyncConnectionToDevice() failed: can't connect GATT with device: " + dDevice + ", caller: " + callerAndThread);
-                            }
-                            Thread.sleep(waitAfterHandshakeAndGattConnectAttempt);
-                            lockConnAttempt.release();
-                            disconnectFromDevice("GATT failed" + ", caller: " + callerAndThread);
+                            Log.i(TAG, "asyncConnectionToDevice() GATT reconnection succeeded for device: " + dDevice + ", caller: " + callerAndThread);
                         }
-                    } catch (Exception e) {
-                        Log.e(TAG, "asyncConnectionToDevice() failed: " + e.getMessage() + " for device: " + dDevice + ", caller: " + callerAndThread);
+                    } else {
+                        if (identified) {
+                            Log.e(TAG, "asyncConnectionToDevice() reconnection failed: connection lost with previously connected device: " + dDevice + ", MultiAddr: " + dMultiAddr + ", PeerID: " + dPeerID + ", caller: " + callerAndThread);
+                        } else {
+                            Log.e(TAG, "asyncConnectionToDevice() failed: can't connect GATT with device: " + dDevice + ", caller: " + callerAndThread);
+                        }
+                        Thread.sleep(waitAfterHandshakeAndGattConnectAttempt);
+                        lockConnAttempt.release();
+                        disconnectFromDevice("GATT failed" + ", caller: " + callerAndThread);
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "asyncConnectionToDevice() failed: " + e.getMessage() + " for device: " + dDevice + ", caller: " + callerAndThread);
 
-                        if (lockConnAttempt.availablePermits() == 0) {
-                            lockConnAttempt.release();
-                        }
+                    if (lockConnAttempt.availablePermits() == 0) {
+                        lockConnAttempt.release();
+                    }
 
-                        if (lockHandshakeAttempt.availablePermits() == 0) {
-                            lockHandshakeAttempt.release();
-                        }
+                    if (lockHandshakeAttempt.availablePermits() == 0) {
+                        lockHandshakeAttempt.release();
                     }
                 }
             }).start();
@@ -216,7 +213,7 @@ class BertyDevice {
     }
 
     // Disconnect device and remove it from index
-    void disconnectFromDevice(String cause) {
+    private void disconnectFromDevice(String cause) {
         Log.w(TAG, "disconnectFromDevice() called for device: " + dDevice + " caused by: " + cause);
 
         try {
@@ -233,12 +230,7 @@ class BertyDevice {
     void asyncDisconnectFromDevice(String cause) {
         Log.w(TAG, "asyncDisconnectFromDevice() called for device: " + dDevice + " caused by: " + cause);
 
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                disconnectFromDevice(cause);
-            }
-        }).start();
+        new Thread(() -> disconnectFromDevice(cause)).start();
     }
 
 
@@ -262,12 +254,12 @@ class BertyDevice {
                 dGatt.connect();
 
                 for (int gattWaitConnectAttempt = 0; gattWaitConnectAttempt < gattWaitConnectMaxAttempts; gattWaitConnectAttempt++) {
-                    Log.d(TAG, "connectGatt() wait " + gattWaitConnectAttemptTimeout + "ms (disconnected state) " + gattWaitConnectAttempt + "/" + gattWaitConnectMaxAttempts + " for device: " + dDevice);
+                    Log.d(TAG, "connectGatt() wait " + gattWaitConnectAttemptTimeout + "ms (disconnected state) " + (gattWaitConnectAttempt + 1) + "/" + gattWaitConnectMaxAttempts + " for device: " + dDevice);
                     Thread.sleep(gattWaitConnectAttemptTimeout);
 
                     if (getGattClientState() == STATE_CONNECTING || getGattServerState() == STATE_CONNECTING) {
                         for (int gattConnectingAttempt = 0; gattConnectingAttempt < gattConnectingMaxAttempts; gattConnectingAttempt++) {
-                            Log.d(TAG, "connectGatt() wait " + gattConnectingAttemptTimeout + "ms (connecting state) " + gattConnectingAttempt + "/" + gattConnectingMaxAttempts + " for device: " + dDevice);
+                            Log.d(TAG, "connectGatt() wait " + gattConnectingAttemptTimeout + "ms (connecting state) " + (gattConnectingAttempt + 1) + "/" + gattConnectingMaxAttempts + " for device: " + dDevice);
                             Thread.sleep(gattConnectingAttemptTimeout);
 
                             if (isGattConnected()) {
@@ -281,8 +273,10 @@ class BertyDevice {
                         return true;
                     }
                 }
-                dGatt.disconnect();
+                disconnectGatt();
+                Thread.sleep(500);
                 setGatt();
+                Thread.sleep(500);
             }
 
             Log.e(TAG, "connectGatt() failed for device: " + dDevice);
@@ -309,7 +303,7 @@ class BertyDevice {
         dMtu = mtu;
     }
 
-    int getGattClientState() {
+    private int getGattClientState() {
         Log.v(TAG, "getGattClientState() called for device: " + dDevice);
 
         final Context context = BleManager.getContext();
@@ -322,7 +316,7 @@ class BertyDevice {
         return manager.getConnectionState(dDevice, GATT);
     }
 
-    int getGattServerState() {
+    private int getGattServerState() {
         Log.v(TAG, "getGattServerState() called for device: " + dDevice);
 
         final Context context = BleManager.getContext();

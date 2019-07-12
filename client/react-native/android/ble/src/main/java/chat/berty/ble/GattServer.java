@@ -20,7 +20,7 @@ import static android.bluetooth.BluetoothGatt.GATT_FAILURE;
 import static android.bluetooth.BluetoothGatt.GATT_SUCCESS;
 
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-public class GattServer extends BluetoothGattServerCallback {
+class GattServer extends BluetoothGattServerCallback {
     private static final String TAG = "gatt_server";
 
     private BluetoothGattServer mBluetoothGattServer;

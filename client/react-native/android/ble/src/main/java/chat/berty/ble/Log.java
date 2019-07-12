@@ -9,28 +9,23 @@ import static android.bluetooth.BluetoothProfile.STATE_DISCONNECTING;
 
 final class Log {
 
-    final static void v(String tag, String log) {
-        // No verbose level on zap
-        // Core.goLogger(tag, "verbose", log);
+    static void v(String tag, String log) {
+    Core.goLogger(tag, "verbose", log);
     }
-
-    final static void d(String tag, String log) {
+    static void d(String tag, String log) {
         Core.goLogger(tag, "debug", log);
     }
-
-    final static void i(String tag, String log) {
+    static void i(String tag, String log) {
         Core.goLogger(tag, "info", log);
     }
-
-    final static void w(String tag, String log) {
+    static void w(String tag, String log) {
         Core.goLogger(tag, "warn", log);
     }
-
-    final static void e(String tag, String log) {
+    static void e(String tag, String log) {
         Core.goLogger(tag, "error", log);
     }
 
-    final static String connectionStateToString(int state) {
+    static String connectionStateToString(int state) {
         switch (state) {
             case STATE_DISCONNECTED:
                 return "disconnected";

@@ -13,7 +13,7 @@ import android.bluetooth.BluetoothDevice;
 import java.util.List;
 
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-public class Scanner extends ScanCallback {
+class Scanner extends ScanCallback {
     private static final String TAG = "scan";
 
     Scanner() { super(); }
