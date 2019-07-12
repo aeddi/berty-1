@@ -1,6 +1,6 @@
 // +build darwin
 
-package darwin_native
+package driver
 
 import (
 	"unsafe"
@@ -14,15 +14,12 @@ import (
 import "C"
 
 // Native -> Go functions
-var GoHandlePeerFound func(remoteAddr string, remoteID string) bool = nil
-var GoReceiveFromDevice func(remoteMa string, payload []byte) = nil
-
 //export handlePeerFound
 func handlePeerFound(cRID *C.char, cRAddr *C.char) C.ushort {
 	rID := C.GoString(cRID)
 	rAddr := C.GoString(cRAddr)
 
-	if GoHandlePeerFound(rID, rAddr) {
+	if HandlePeerFound(rID, rAddr) {
 		return 1
 	}
 	return 0
@@ -33,7 +30,14 @@ func receiveFromDevice(cRAddr *C.char, cPayload unsafe.Pointer, cLength C.int) {
 	rAddr := C.GoString(cRAddr)
 	payload := C.GoBytes(cPayload, cLength)
 
-	GoReceiveFromDevice(rAddr, payload)
+	ReceiveFromDevice(rAddr, payload)
+}
+
+//export connClosedWithDevice
+func connClosedWithDevice(cRAddr *C.char) {
+	rAddr := C.GoString(cRAddr)
+
+	ConnClosedWithDevice(rAddr)
 }
 
 // Go -> Native functions

@@ -127,7 +127,7 @@ CBService *getService(NSArray *services, NSString *uuid) {
                 if (service == nil) {
                     return;
                 }
-                [self discoverCharacteristics:@[self.manager.maUUID, self.manager.peerUUID, self.manager.writerUUID,] forService:service withBlock:^(NSArray *chars, NSError *error) {
+                [self discoverCharacteristics:@[self.manager.maUUID, self.manager.peerUUID, self.manager.writerUUID, self.manager.closerUUID,] forService:service withBlock:^(NSArray *chars, NSError *error) {
                     if (error) {
                         os_log_error(OS_LOG_BLE, "handshake() device %@ discover characteristic failed %@", [device.peripheral.identifier UUIDString], error);
                         return;
