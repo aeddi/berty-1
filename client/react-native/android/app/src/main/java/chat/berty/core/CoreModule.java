@@ -16,7 +16,7 @@ import core.Core;
 import core.NativeBridge;
 import core.MobileNotification;
 
-import chat.berty.ble.BleManager;
+import libp2p.transport.ble.BleManager;
 
 public class CoreModule extends ReactContextBaseJavaModule {
     private Logger logger = new Logger("chat.berty.io");

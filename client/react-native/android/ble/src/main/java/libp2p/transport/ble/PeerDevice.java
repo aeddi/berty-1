@@ -1,4 +1,4 @@
-package chat.berty.ble;
+package libp2p.transport.ble;
 
 import core.Core;
 
@@ -31,9 +31,8 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-class BertyDevice {
+class PeerDevice {
     private static final String TAG = "device";
-
 
     // Timeout and maximum attempts for GATT connection
     private static final int gattConnectMaxAttempts = 20;
@@ -42,6 +41,9 @@ class BertyDevice {
     private static final int gattConnectingAttemptTimeout = 240;
     private static final int gattConnectingMaxAttempts = 5;
     private static final int waitAfterHandshakeAndGattConnectAttempt = 2000;
+    private static final int waitAfterDeviceDisconnect = 3000;
+    private static final int waitAfterGattDisconnect = 500;
+    private static final int waitAfterGattSetup = 500;
 
     // Timeout and maximum attempts for service/characteristics discovery and check
     private static final int servDiscoveryAttemptTimeout = 1000;
@@ -66,13 +68,13 @@ class BertyDevice {
     private static final int DEFAULT_MTU = 23; // See https://chromium.googlesource.com/aosp/platform/system/bt/+/29e794418452c8b35c2d42fe0cda81acd86bbf43/stack/include/gatt_api.h#133
     private static final int MAXIMUM_MTU = 517; // See https://chromium.googlesource.com/aosp/platform/system/bt/+/29e794418452c8b35c2d42fe0cda81acd86bbf43/stack/include/gatt_api.h#123
 
-    private BluetoothGattService bertyService;
+    private BluetoothGattService libp2pService;
     private BluetoothGattCharacteristic maCharacteristic;
     private BluetoothGattCharacteristic peerIDCharacteristic;
     BluetoothGattCharacteristic writerCharacteristic;
 
 
-    // Berty identification attributes
+    // Libp2p identification attributes
     private String dPeerID;
     private String dMultiAddr;
     private boolean identified;
@@ -88,14 +90,14 @@ class BertyDevice {
     private final List<byte[]> toSend = new ArrayList<>();
 
 
-    BertyDevice(BluetoothDevice device) {
+    PeerDevice(BluetoothDevice device) {
         dAddr = device.getAddress();
         dDevice = device;
         dMtu = DEFAULT_MTU;
     }
 
 
-    // Berty identification related
+    // Libp2p identification related
     String getAddr() { return dAddr; }
 
     void setMultiAddr(String multiAddr) {
@@ -123,10 +125,10 @@ class BertyDevice {
 
     String getPeerID() { return dPeerID; }
 
-    void setBertyService(BluetoothGattService service) {
-        Log.d(TAG, "setBertyService() called for device: " + dDevice + " with current service: " + bertyService + ", new service: " + service);
+    void setLibp2pService(BluetoothGattService service) {
+        Log.d(TAG, "setLibp2pService() called for device: " + dDevice + " with current service: " + libp2pService + ", new service: " + service);
 
-        bertyService = service;
+        libp2pService = service;
     }
 
     boolean isIdentified() {
@@ -135,7 +137,7 @@ class BertyDevice {
         return identified;
     }
 
-    // Attempt to (re)connect GATT then, if device isn't already identified, init Berty handshake
+    // Attempt to (re)connect GATT then, if device isn't already identified, init Libp2p handshake
     void asyncConnectionToDevice(final String caller) {
         Log.d(TAG, "asyncConnectionToDevice() called for device: " + dDevice + ", caller: " + caller);
 
@@ -153,34 +155,32 @@ class BertyDevice {
 
                         if (!identified) {
                             if (lockHandshakeAttempt.tryAcquire()) {
-                                Log.i(TAG, "asyncConnectionToDevice() try to Berty handshake with device: " + dDevice + ", caller: " + callerAndThread);
+                                Log.i(TAG, "asyncConnectionToDevice() try to Libp2p handshake with device: " + dDevice + ", caller: " + callerAndThread);
 
-                                if (bertyHandshake(callerAndThread)) {
+                                if (libp2pHandshake(callerAndThread)) {
                                     Log.i(TAG, "asyncConnectionToDevice() succeeded with device: " + dDevice + ", MultiAddr: " + dMultiAddr + ", PeerID: " + dPeerID + ", caller: " + callerAndThread);
                                     identified = true;
 
                                     if (dMtu == DEFAULT_MTU) {
                                         Log.i(TAG, "asyncConnectionToDevice() try to agree on a new MTU with device: " + dDevice + ", caller: " + callerAndThread);
                                         dGatt.requestMtu(MAXIMUM_MTU);
-                                        try {
-                                            Thread.sleep(300); // Wait for new MTU before starting the libp2p connect
-                                        } catch (final InterruptedException e) {}
+                                        Thread.sleep(300); // Wait for new MTU before starting the libp2p connect
                                     }
 
                                     if (Core.handlePeerFound(dPeerID, dMultiAddr)) {
                                         Log.i(TAG, "asyncConnectionToDevice() peer handled successfully by golang with device: " + dDevice + ", caller: " + callerAndThread);
                                     } else {
                                         Log.e(TAG, "asyncConnectionToDevice() failed: golang can't handle new peer for device: " + dDevice + ", caller: " + callerAndThread);
-                                        disconnectFromDevice("Berty handshake failed, caller: " + callerAndThread);
+                                        disconnectFromDevice("Libp2p handshake failed, caller: " + callerAndThread);
                                     }
                                 } else {
-                                    Log.d(TAG, "asyncConnectionToDevice() Berty handshake failed with device: " + dDevice + ", caller: " + callerAndThread);
-                                    disconnectFromDevice("Berty handshake failed, caller: " + callerAndThread);
+                                    Log.d(TAG, "asyncConnectionToDevice() Libp2p handshake failed with device: " + dDevice + ", caller: " + callerAndThread);
+                                    disconnectFromDevice("Libp2p handshake failed, caller: " + callerAndThread);
                                 }
                                 Thread.sleep(waitAfterHandshakeAndGattConnectAttempt);
                                 lockHandshakeAttempt.release();
                             } else {
-                                Log.d(TAG, "asyncConnectionToDevice() skipped Berty handshake: already running for device: " + dDevice);
+                                Log.d(TAG, "asyncConnectionToDevice() skipped Libp2p handshake: already running for device: " + dDevice);
                             }
                         } else {
                             Log.i(TAG, "asyncConnectionToDevice() GATT reconnection succeeded for device: " + dDevice + ", caller: " + callerAndThread);
@@ -219,8 +219,8 @@ class BertyDevice {
         try {
             lockConnAttempt.acquire();
             disconnectGatt();
+            Thread.sleep(waitAfterDeviceDisconnect);
             DeviceManager.removeDeviceFromIndex(this);
-            Thread.sleep(waitAfterHandshakeAndGattConnectAttempt);
             lockConnAttempt.release();
         } catch (Exception e) {
             Log.d(TAG, "disconnectFromDevice() failed: " + e.getMessage() + " for device: " + dDevice);
@@ -274,9 +274,9 @@ class BertyDevice {
                     }
                 }
                 disconnectGatt();
-                Thread.sleep(500);
+                Thread.sleep(waitAfterGattDisconnect);
                 setGatt();
-                Thread.sleep(500);
+                Thread.sleep(waitAfterGattSetup);
             }
 
             Log.e(TAG, "connectGatt() failed for device: " + dDevice);
@@ -336,70 +336,70 @@ class BertyDevice {
     }
 
 
-    // Check if remote device is Berty compliant then, if yes, two-way exchange MultiAddr and PeerID
-    private boolean bertyHandshake(String caller) {
-        Log.i(TAG, "bertyHandshake() called for device: " + dDevice + ", caller: " + caller);
+    // Check if remote device is Libp2p compliant then, if yes, two-way exchange MultiAddr and PeerID
+    private boolean libp2pHandshake(String caller) {
+        Log.i(TAG, "libp2pHandshake() called for device: " + dDevice + ", caller: " + caller);
 
-        if (checkBertyDeviceCompliance() && sendInfosToRemoteDevice() && receiveInfosFromRemoteDevice()) {
-            Log.i(TAG, "bertyHandshake() succeeded for device: " + dDevice);
+        if (checkPeerDeviceLibp2pCompliance() && sendInfosToRemoteDevice() && receiveInfosFromRemoteDevice()) {
+            Log.i(TAG, "libp2pHandshake() succeeded for device: " + dDevice);
             return true;
         }
 
-        Log.e(TAG, "bertyHandshake() failed for device: " + dDevice);
+        Log.e(TAG, "libp2pHandshake() failed for device: " + dDevice);
 
         return false;
     }
 
 
-    // Wait for discovery and check if service and characteristics are Berty device compliant
-    private boolean checkBertyDeviceCompliance() {
-        Log.d(TAG, "checkBertyDeviceCompliance() called for device: " + dDevice);
+    // Wait for discovery and check if service and characteristics are Libp2p device compliant
+    private boolean checkPeerDeviceLibp2pCompliance() {
+        Log.d(TAG, "checkPeerDeviceLibp2pCompliance() called for device: " + dDevice);
 
-        if (checkBertyServiceCompliance() && checkBertyCharacteristicsCompliance()) {
-            Log.i(TAG, "checkBertyDeviceCompliance() succeeded for device: " + dDevice);
+        if (checkLibp2pServiceCompliance() && checkLibp2pCharacteristicsCompliance()) {
+            Log.i(TAG, "checkPeerDeviceLibp2pCompliance() succeeded for device: " + dDevice);
             return true;
         }
 
-        Log.e(TAG, "checkBertyDeviceCompliance() failed for device: " + dDevice);
+        Log.e(TAG, "checkPeerDeviceLibp2pCompliance() failed for device: " + dDevice);
 
         return false;
     }
 
-    private boolean checkBertyServiceCompliance() {
-        Log.d(TAG, "checkBertyServiceCompliance() called for device: " + dDevice);
+    private boolean checkLibp2pServiceCompliance() {
+        Log.d(TAG, "checkLibp2pServiceCompliance() called for device: " + dDevice);
 
         try {
             // Wait for services discovery started
             for (int servDiscoveryAttempt = 0; servDiscoveryAttempt < servDiscoveryMaxAttempts && !dGatt.discoverServices(); servDiscoveryAttempt++) {
                 if (isGattConnected()) {
-                    Log.d(TAG, "checkBertyServiceCompliance() device " + dDevice + " GATT is connected, waiting for service discovery: " + servDiscoveryAttempt + "/" + servDiscoveryMaxAttempts);
+                    Log.d(TAG, "checkLibp2pServiceCompliance() device " + dDevice + " GATT is connected, waiting for service discovery: " + servDiscoveryAttempt + "/" + servDiscoveryMaxAttempts);
                     Thread.sleep(servDiscoveryAttemptTimeout);
                 } else {
-                    Log.e(TAG, "checkBertyServiceCompliance() failed: device " + dDevice + " GATT is disconnected");
+                    Log.e(TAG, "checkLibp2pServiceCompliance() failed: device " + dDevice + " GATT is disconnected");
                     return false;
                 }
             }
 
-            // Wait for services discovery completed and check that Berty service is found
+            // Wait for services discovery completed and check that Libp2p service is found
             if (waitServiceCheck.tryAcquire(servCheckTimeout, TimeUnit.MILLISECONDS)) {
-                if (bertyService != null) {
-                    Log.i(TAG, "checkBertyServiceCompliance() succeeded for device: " + dDevice);
+                if (libp2pService != null) {
+                    Log.i(TAG, "checkLibp2pServiceCompliance() succeeded for device: " + dDevice);
                     return true;
                 } else {
-                    Log.e(TAG, "checkBertyServiceCompliance() failed: Berty service not found on device: " + dDevice);
+                    Log.e(TAG, "checkLibp2pServiceCompliance() failed: Libp2p service not found on device: " + dDevice);
                 }
             } else {
-                Log.e(TAG, "checkBertyServiceCompliance() timeouted for device: " + dDevice);
+                Log.e(TAG, "checkLibp2pServiceCompliance() timeouted for device: " + dDevice);
             }
         } catch (Exception e) {
-            Log.e(TAG, "checkBertyServiceCompliance() failed: " + e.getMessage() + ", for device: " + dDevice);
+            Log.e(TAG, "checkLibp2pServiceCompliance() failed: " + e.getMessage() + ", for device: " + dDevice);
         }
 
         return false;
     }
 
-    private boolean checkBertyCharacteristicsCompliance() {
-        Log.d(TAG, "checkBertyCharacteristicsCompliance() called for device: " + dDevice);
+    private boolean checkLibp2pCharacteristicsCompliance() {
+        Log.d(TAG, "checkLibp2pCharacteristicsCompliance() called for device: " + dDevice);
 
         class PopulateCharacteristic implements Callable<BluetoothGattCharacteristic> {
             private UUID uuid;
@@ -411,7 +411,7 @@ class BertyDevice {
             }
 
             public BluetoothGattCharacteristic call() {
-                return bertyService.getCharacteristic(uuid);
+                return libp2pService.getCharacteristic(uuid);
             }
         }
 
@@ -428,30 +428,30 @@ class BertyDevice {
                 BluetoothGattCharacteristic characteristic = future.get(charDiscoveryTimeout, TimeUnit.MILLISECONDS);
 
                 if (characteristic != null && characteristic.getUuid().equals(BleManager.MA_UUID)) {
-                    Log.d(TAG, "checkBertyCharacteristicsCompliance() MultiAddr characteristic retrieved: " + characteristic + " on device: " + dDevice);
+                    Log.d(TAG, "checkLibp2pCharacteristicsCompliance() MultiAddr characteristic retrieved: " + characteristic + " on device: " + dDevice);
                     maCharacteristic = characteristic;
                 } else if (characteristic != null && characteristic.getUuid().equals(BleManager.PEER_ID_UUID)) {
-                    Log.d(TAG, "checkBertyCharacteristicsCompliance() PeerID characteristic retrieved: " + characteristic + " on device: " + dDevice);
+                    Log.d(TAG, "checkLibp2pCharacteristicsCompliance() PeerID characteristic retrieved: " + characteristic + " on device: " + dDevice);
                     peerIDCharacteristic = characteristic;
                 } else if (characteristic != null && characteristic.getUuid().equals(BleManager.WRITER_UUID)) {
-                    Log.d(TAG, "checkBertyCharacteristicsCompliance() Writer characteristic retrieved: " + characteristic + " on device: " + dDevice);
+                    Log.d(TAG, "checkLibp2pCharacteristicsCompliance() Writer characteristic retrieved: " + characteristic + " on device: " + dDevice);
                     writerCharacteristic = characteristic;
                 } else if (characteristic == null) {
-                    Log.e(TAG, "checkBertyCharacteristicsCompliance() timeouted on device: " + dDevice);
+                    Log.e(TAG, "checkLibp2pCharacteristicsCompliance() timeouted on device: " + dDevice);
                     break;
                 } else {
-                    Log.e(TAG, "checkBertyCharacteristicsCompliance() unknown characteristic retrieved: " + characteristic + " on device: " + dDevice);
+                    Log.e(TAG, "checkLibp2pCharacteristicsCompliance() unknown characteristic retrieved: " + characteristic + " on device: " + dDevice);
                 }
             }
 
             if (maCharacteristic != null && peerIDCharacteristic != null && writerCharacteristic != null) {
-                Log.i(TAG, "checkBertyCharacteristicsCompliance() succeeded for device: " + dDevice);
+                Log.i(TAG, "checkLibp2pCharacteristicsCompliance() succeeded for device: " + dDevice);
                 return true;
             } else {
-                Log.e(TAG, "checkBertyCharacteristicsCompliance() failed: can't retrieve Berty characteristics on device: " + dDevice + ", maCharacteristic: " + maCharacteristic + ", peerIDCharacteristic: " + peerIDCharacteristic + ", writerCharacteristic: " + writerCharacteristic);
+                Log.e(TAG, "checkLibp2pCharacteristicsCompliance() failed: can't retrieve Libp2p characteristics on device: " + dDevice + ", maCharacteristic: " + maCharacteristic + ", peerIDCharacteristic: " + peerIDCharacteristic + ", writerCharacteristic: " + writerCharacteristic);
             }
         } catch (Exception e) {
-            Log.e(TAG, "checkBertyCharacteristicsCompliance() failed: " + e.getMessage() + " for device: " + dDevice);
+            Log.e(TAG, "checkLibp2pCharacteristicsCompliance() failed: " + e.getMessage() + " for device: " + dDevice);
         }
 
         return false;

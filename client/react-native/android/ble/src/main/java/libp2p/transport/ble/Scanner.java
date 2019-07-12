@@ -1,4 +1,4 @@
-package chat.berty.ble;
+package libp2p.transport.ble;
 
 import android.os.Build;
 import android.annotation.TargetApi;
@@ -15,8 +15,6 @@ import java.util.List;
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
 class Scanner extends ScanCallback {
     private static final String TAG = "scan";
-
-    Scanner() { super(); }
 
     static ScanSettings createScanSetting() {
         return new ScanSettings.Builder()
@@ -104,15 +102,15 @@ class Scanner extends ScanCallback {
         }
 
         BluetoothDevice device = result.getDevice();
-        BertyDevice bertyDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
+        PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
 
-        if (bertyDevice == null) {
+        if (peerDevice == null) {
             Log.i(TAG, "parseResult() scanned a new device: " + device.getAddress());
-            bertyDevice = new BertyDevice(device);
-            DeviceManager.addDeviceToIndex(bertyDevice);
+            peerDevice = new PeerDevice(device);
+            DeviceManager.addDeviceToIndex(peerDevice);
 
             // Everything is handled in this method: GATT connection/reconnection and handshake if necessary
-            bertyDevice.asyncConnectionToDevice("parseResult()");
+            peerDevice.asyncConnectionToDevice("parseResult()");
         }
     }
 }

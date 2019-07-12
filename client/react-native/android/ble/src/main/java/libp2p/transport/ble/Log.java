@@ -1,4 +1,4 @@
-package chat.berty.ble;
+package libp2p.transport.ble;
 
 import core.Core;
 

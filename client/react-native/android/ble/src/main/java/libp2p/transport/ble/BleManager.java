@@ -1,4 +1,4 @@
-package chat.berty.ble;
+package libp2p.transport.ble;
 
 import android.app.Activity;
 import android.content.Context;
@@ -174,11 +174,11 @@ public final class BleManager {
                 return false;
             }
 
-            BluetoothGattService bertyService = createService();
-            Log.d(TAG, "startBleDriver() service created: " + bertyService);
+            BluetoothGattService libp2pService = createService();
+            Log.d(TAG, "startBleDriver() service created: " + libp2pService);
 
             BluetoothGattServer gattServer = bleManager.openGattServer(context, mGattServerCallback);
-            gattServer.addService(bertyService);
+            gattServer.addService(libp2pService);
             mGattServerCallback.setBluetoothGattServer(gattServer);
 
             bluetoothReady = true;

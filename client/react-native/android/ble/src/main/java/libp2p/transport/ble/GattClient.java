@@ -1,4 +1,4 @@
-package chat.berty.ble;
+package libp2p.transport.ble;
 
 import android.os.Build;
 import android.annotation.TargetApi;
@@ -26,9 +26,6 @@ import static android.bluetooth.BluetoothGatt.GATT_WRITE_NOT_PERMITTED;
 class GattClient extends BluetoothGattCallback {
     private static final String TAG = "gatt_client";
 
-    GattClient() { super(); }
-
-
     /**
      * Callback indicating when GATT client has connected/disconnected to/from a remote
      * GATT server.
@@ -45,16 +42,16 @@ class GattClient extends BluetoothGattCallback {
         Log.d(TAG, "onConnectionStateChange() client called with gatt: " + gatt + ", status: " + status + ", newState: " + Log.connectionStateToString(newState));
 
         BluetoothDevice device = gatt.getDevice();
-        BertyDevice bertyDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
+        PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
 
-        if (bertyDevice == null) {
+        if (peerDevice == null) {
             Log.i(TAG, "onConnectionStateChange() client: incoming connection from device: " + device.getAddress());
-            bertyDevice = new BertyDevice(device);
-            DeviceManager.addDeviceToIndex(bertyDevice);
+            peerDevice = new PeerDevice(device);
+            DeviceManager.addDeviceToIndex(peerDevice);
         }
 
         // Everything is handled in this method: GATT connection/reconnection and handshake if necessary
-        bertyDevice.asyncConnectionToDevice("onConnectionStateChange() client state: " + Log.connectionStateToString(newState));
+        peerDevice.asyncConnectionToDevice("onConnectionStateChange() client state: " + Log.connectionStateToString(newState));
 
         super.onConnectionStateChange(gatt, status, newState);
     }
@@ -70,17 +67,17 @@ class GattClient extends BluetoothGattCallback {
     public void onServicesDiscovered(BluetoothGatt gatt, int status) {
         Log.d(TAG, "onServicesDiscovered() called with gatt: " + gatt + ", status: " + status);
 
-        BertyDevice bertyDevice = DeviceManager.getDeviceFromAddr(gatt.getDevice().getAddress());
+        PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(gatt.getDevice().getAddress());
 
-        if (bertyDevice != null) {
+        if (peerDevice != null) {
             for (BluetoothGattService service : gatt.getServices()) {
                 if (service.getUuid().equals(BleManager.SERVICE_UUID)) {
-                    Log.d(TAG, "onServicesDiscovered() Berty service found on device: " + bertyDevice.getAddr());
-                    bertyDevice.setBertyService(service);
+                    Log.d(TAG, "onServicesDiscovered() Libp2p service found on device: " + peerDevice.getAddr());
+                    peerDevice.setLibp2pService(service);
                     break;
                 }
             }
-            bertyDevice.waitServiceCheck.release();
+            peerDevice.waitServiceCheck.release();
         }
 
         super.onServicesDiscovered(gatt, status);
@@ -105,11 +102,11 @@ class GattClient extends BluetoothGattCallback {
     public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
         Log.d(TAG, "onCharacteristicWrite() called with gatt: " + gatt + ", characteristic: " + characteristic + ", status: " + status);
 
-        BertyDevice bertyDevice = DeviceManager.getDeviceFromAddr(gatt.getDevice().getAddress());
+        PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(gatt.getDevice().getAddress());
 
-        if (bertyDevice != null) {
+        if (peerDevice != null) {
             if (status == GATT_SUCCESS) {
-                bertyDevice.waitWriteDone.release();
+                peerDevice.waitWriteDone.release();
             } else {
                 String errorString;
 
@@ -167,10 +164,10 @@ class GattClient extends BluetoothGattCallback {
     public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
         Log.d(TAG, "onMtuChanged() called with gatt: " + gatt + ", mtu: " + mtu + ", status: " + status);
 
-        BertyDevice bertyDevice = DeviceManager.getDeviceFromAddr(gatt.getDevice().getAddress());
+        PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(gatt.getDevice().getAddress());
 
-        if (bertyDevice != null) {
-            bertyDevice.setMtu(mtu);
+        if (peerDevice != null) {
+            peerDevice.setMtu(mtu);
         }
 
         super.onMtuChanged(gatt, mtu, status);
