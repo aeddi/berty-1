@@ -28,10 +28,6 @@ func ReceiveFromDevice(rAddr string, payload []byte) {
 	bledrv.ReceiveFromDevice(rAddr, payload)
 }
 
-func ConnClosedWithDevice(rAddr string) {
-	bledrv.ConnClosedWithDevice(rAddr)
-}
-
 // Native logger -> Go zaplogger
 func GoLogger(tag string, level string, log string) {
 	loggerBLE := zap.L().Named(defaultLoggerName + ".ble." + tag)

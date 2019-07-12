@@ -30,23 +30,7 @@ type Transport struct {
 
 // NewTransport creates a BLE transport object that tracks dialers and listener.
 // It also starts the discovery service.
-func NewTransport(h host.Host, u *tptu.Upgrader /*, pk crypto.PrivKey */) (*Transport, error) {
-	// import tls "github.com/libp2p/go-libp2p-tls"
-	logger().Debug("NEWTRANSP CALLED")
-	// customSecure, err := tls.New(pk)
-	// if err != nil {
-	// 	return nil, errors.Wrap(err, "transport creation failed")
-	// }
-	//
-	// customMuxer := &mplex.Transport{}
-
-	// customUpgrader := &tptu.Upgrader{
-	// 	Protector: pr,
-	// 	Secure:    customSecure,
-	// 	Muxer:     customMuxer,
-	// 	Filters:   f,
-	// }
-
+func NewTransport(h host.Host, u *tptu.Upgrader) (*Transport, error) {
 	return &Transport{
 		host:     h,
 		upgrader: u,
