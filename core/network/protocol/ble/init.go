@@ -6,7 +6,8 @@ import (
 
 func init() {
 	// Bind native to golang bridge functions
-	bledrv.ReceiveFromDevice = ReceiveFromDevice
-	bledrv.ConnClosedWithDevice = ConnClosedWithDevice
-	bledrv.HandlePeerFound = HandlePeerFound
+	bledrv.BindNativeToGoFunctions(
+		HandlePeerFound,
+		ReceiveFromDevice,
+	)
 }

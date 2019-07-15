@@ -23,14 +23,12 @@
 @property (nonatomic, strong, nonnull) CBMutableCharacteristic *maCharacteristic;
 @property (nonatomic, strong, nonnull) CBMutableCharacteristic *peerIDCharacteristic;
 @property (nonatomic, strong, nonnull) CBMutableCharacteristic *writerCharacteristic;
-@property (nonatomic, strong, nonnull) CBMutableCharacteristic *closerCharacteristic;
 @property (nonatomic, strong, nullable) NSString *ma;
 @property (nonatomic, strong, nullable) NSString *peerID;
 @property (nonatomic, strong, nonnull) CBUUID *serviceUUID;
 @property (nonatomic, strong, nonnull) CBUUID *maUUID;
 @property (nonatomic, strong, nonnull) CBUUID *peerUUID;
 @property (nonatomic, strong, nonnull) CBUUID *writerUUID;
-@property (nonatomic, strong, nonnull) CBUUID *closerUUID;
 @property (nonatomic, strong, nonnull) NSMutableArray *bDevices;
 @property (nonatomic, strong, nonnull) NSMutableArray *knownPeripherals;
 @property (nonatomic, strong, nonnull) CBCentralManager* cManager;

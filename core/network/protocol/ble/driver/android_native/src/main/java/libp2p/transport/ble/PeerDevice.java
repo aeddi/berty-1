@@ -41,7 +41,7 @@ class PeerDevice {
     private static final int gattConnectingAttemptTimeout = 240;
     private static final int gattConnectingMaxAttempts = 5;
     private static final int waitAfterHandshakeAndGattConnectAttempt = 2000;
-    private static final int waitAfterDeviceDisconnect = 10000;
+    private static final int waitAfterDeviceDisconnect = 3000;
     private static final int waitAfterGattDisconnect = 500;
     private static final int waitAfterGattSetup = 500;
 

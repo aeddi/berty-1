@@ -18,8 +18,6 @@ static NSString* const __nonnull SERVICE_UUID = @"A06C6AB8-886F-4D56-82FC-2CF861
 
 static NSString* const __nonnull WRITER_UUID = @"000CBD77-8D30-4EFF-9ADD-AC5F10C2CC1C";
 
-static NSString* const __nonnull CLOSER_UUID = @"AD127A46-D065-4D72-B15A-EB2B3DA20561";
-
 static NSString* const __nonnull MA_UUID = @"9B827770-DC72-4C55-B8AE-0870C7AC15A8";
 
 static NSString* const __nonnull PEER_ID_UUID = @"0EF50D30-E208-4315-B323-D05E0A23E6B3";
@@ -38,15 +36,14 @@ static NSString* const __nonnull EOD = @"EOD";
         _knownPeripherals = [NSMutableArray array];
 
         _cManager = [[CBCentralManager alloc]
-                          initWithDelegate:self
-                          queue:dispatch_queue_create("CentralManager", DISPATCH_QUEUE_SERIAL)
-                          options:@{CBCentralManagerOptionShowPowerAlertKey:[NSNumber numberWithBool:YES]}
-                          ];
+                        initWithDelegate:self
+                        queue:dispatch_queue_create("CentralManager", DISPATCH_QUEUE_SERIAL)
+                        options:@{CBCentralManagerOptionShowPowerAlertKey:[NSNumber numberWithBool:YES]}];
 
         _pManager = [[CBPeripheralManager alloc]
-                             initWithDelegate:self
-                             queue:dispatch_queue_create("PeripheralManager", DISPATCH_QUEUE_SERIAL)
-                             options:@{CBPeripheralManagerOptionShowPowerAlertKey:[NSNumber numberWithBool:YES]}];
+                        initWithDelegate:self
+                        queue:dispatch_queue_create("PeripheralManager", DISPATCH_QUEUE_SERIAL)
+                        options:@{CBPeripheralManagerOptionShowPowerAlertKey:[NSNumber numberWithBool:YES]}];
 
         [self initService];
         [self addService];
@@ -61,7 +58,6 @@ static NSString* const __nonnull EOD = @"EOD";
     self.maUUID = [CBUUID UUIDWithString:MA_UUID];
     self.peerUUID = [CBUUID UUIDWithString:PEER_ID_UUID];
     self.writerUUID = [CBUUID UUIDWithString:WRITER_UUID];
-    self.closerUUID = [CBUUID UUIDWithString:CLOSER_UUID];
 
     self.maCharacteristic = [[CBMutableCharacteristic alloc]
                              initWithType:self.maUUID
@@ -78,16 +74,10 @@ static NSString* const __nonnull EOD = @"EOD";
                                  properties:CBCharacteristicPropertyWrite
                                  value:nil
                                  permissions:CBAttributePermissionsWriteable];
-    self.closerCharacteristic = [[CBMutableCharacteristic alloc]
-                                 initWithType:self.closerUUID
-                                 properties:CBCharacteristicPropertyWrite
-                                 value:nil
-                                 permissions:CBAttributePermissionsWriteable];
 
     self.bertyService = [[CBMutableService alloc] initWithType:self.serviceUUID
                                                        primary:YES];
-    self.bertyService.characteristics = @[self.closerCharacteristic,
-                                          self.writerCharacteristic,
+    self.bertyService.characteristics = @[self.writerCharacteristic,
                                           self.maCharacteristic,
                                           self.peerIDCharacteristic];
 }

@@ -7,34 +7,10 @@ import (
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 	ma "github.com/multiformats/go-multiaddr"
-	"go.uber.org/zap"
 )
 
-var disc *discovery
-
-type discovery struct {
-	transport *Transport
-}
-
-func startDiscovery(t *Transport) {
-	disc = &discovery{
-		transport: t,
-	}
-
-	// Disable discovery if listener is closed
-	go func() {
-		<-t.listener.closer
-		disc = nil
-	}()
-}
-
-// Handler called by the native driver when a new peer is found
+// HandlePeerFound is called by the native driver when a new peer is found.
 func HandlePeerFound(rID string, rAddr string) bool {
-	if disc == nil {
-		logger().Error("discovery handle peer failed: discovery service not started")
-		return false
-	}
-
 	rPID, err := peer.IDB58Decode(rID)
 	if err != nil {
 		logger().Error("discovery handle peer failed: wrong remote peerID")
@@ -47,33 +23,39 @@ func HandlePeerFound(rID string, rAddr string) bool {
 		return false
 	}
 
-	go addToPeerStoreAndConnect(rPID, rMa, rAddr)
+	// Checks if a listener is currently running.
+	if gListener == nil || gListener.ctx.Err() != nil {
+		logger().Error("discovery handle peer failed: listener not running")
+		return false
+	}
 
-	return true
-}
+	// Ensures that gListener won't be unset until operations using it are finished
+	gListener.inUse.Add(1)
 
-func addToPeerStoreAndConnect(rPID peer.ID, rMa ma.Multiaddr, rAddr string) {
-	// Add peer to peerstore
-	disc.transport.host.Peerstore().AddAddr(rPID, rMa, pstore.TempAddrTTL)
+	// Adds peer to peerstore.
+	gListener.transport.host.Peerstore().AddAddr(rPID, rMa, pstore.TempAddrTTL)
 
-	// Peer with smallest addr (lexicographical order) init libp2p connect while
-	// the other wait for incoming connection
-	if disc.transport.listener.Addr().String() < rAddr {
-		err := disc.transport.host.Connect(context.Background(), pstore.PeerInfo{
+	// Peer with lexicographical smallest address inits libp2p connection.
+	if gListener.Addr().String() < rAddr {
+		// Async connect so HandlePeerFound can return and unlock the native driver.
+		// Needed to read and write during the connect handshake.
+		go gListener.transport.host.Connect(context.Background(), pstore.PeerInfo{
 			ID:    rPID,
 			Addrs: []ma.Multiaddr{rMa},
 		})
-		if err != nil {
-			logger().Error("discovery auto connecting failed", zap.Error(err))
-		} else {
-			logger().Debug("discovery auto connecting succeeded")
-		}
-	} else {
-		logger().Debug("discovery send info to listener for incoming conn request")
-		disc.transport.listener.incomingConnReq <- connReq{
-			remoteAddr:   rAddr,
-			remoteMa:     rMa,
-			remotePeerID: rPID,
-		}
+
+		return true
+	}
+
+	// Peer with lexicographical biggest address accepts incoming connection.
+	select {
+	case gListener.inboundConnReq <- connReq{
+		remoteMa:     rMa,
+		remotePeerID: rPID,
+	}:
+		return true
+	case <-gListener.ctx.Done():
+		gListener.inUse.Done()
+		return false
 	}
 }

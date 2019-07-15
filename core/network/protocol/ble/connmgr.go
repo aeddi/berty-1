@@ -1,116 +1,68 @@
 package ble
 
 import (
+	"context"
+	"io"
 	"sync"
 	"time"
 
-	blema "berty.tech/core/network/protocol/ble/multiaddr"
+	bledrv "berty.tech/core/network/protocol/ble/driver"
+	tpt "github.com/libp2p/go-libp2p-core/transport"
 	peer "github.com/libp2p/go-libp2p-peer"
-	yamux "github.com/libp2p/go-yamux"
 	ma "github.com/multiformats/go-multiaddr"
+	"go.uber.org/zap"
 )
 
-type reader struct {
-	sync.Mutex
-	funcSlice []func(*Conn)
-}
+// Connmgr keeps tracks of opened conn so the native driver can read from them
+// and close them.
+var connMap sync.Map
 
-var (
-	conns   sync.Map
-	readers sync.Map
-)
+// newConn returns an inbound or outbound tpt.CapableConn upgraded from a Conn.
+func newConn(ctx context.Context, t *Transport, rMa ma.Multiaddr, rPID peer.ID, inbound bool) (tpt.CapableConn, error) {
+	// Creates a BLE manet.Conn
+	pr, pw := io.Pipe()
+	connCtx, cancel := context.WithCancel(gListener.ctx)
 
-type side int
-
-const (
-	client side = 0
-	server side = 1
-)
-
-func newConn(transport *Transport, lID, rID peer.ID, lMa, rMa ma.Multiaddr, s side) *Conn {
-	conn := Conn{
-		incomingData:  make(chan []byte),
-		remainingData: make([]byte, 0),
-		transport:     transport,
-		localID:       lID,
-		remoteID:      rID,
-		localMa:       lMa,
-		remoteMa:      rMa,
-		closed:        false,
-		closer:        make(chan struct{}),
+	maconn := &Conn{
+		readIn:   pw,
+		readOut:  pr,
+		localMa:  gListener.localMa,
+		remoteMa: rMa,
+		ctx:      connCtx,
+		cancel:   cancel,
 	}
 
-	configDefault := yamux.DefaultConfig()
-	configDefault.EnableKeepAlive = false            // No need for keepAlive
-	configDefault.ConnectionWriteTimeout = time.Hour // Timeout is handled by BLE driver
-	configDefault.LogOutput = getYamuxLogger()       // Output logs on Berty's logger
+	// Unlock gListener locked from discovery.go (HandlePeerFound)
+	gListener.inUse.Done()
 
-	var err error
-	if s == server {
-		conn.sess, err = yamux.Server(&conn, configDefault)
+	// Stores the conn in connMap, will be deleted during conn.Close()
+	connMap.Store(maconn.RemoteAddr().String(), maconn)
+
+	// Returns an upgraded CapableConn (muxed, addr filtered, secured, etc...)
+	if inbound {
+		return t.upgrader.UpgradeInbound(ctx, t, maconn)
 	} else {
-		conn.sess, err = yamux.Client(&conn, configDefault)
+		return t.upgrader.UpgradeOutbound(ctx, t, maconn, rPID)
 	}
-	if err != nil {
-		panic(err)
-	}
-
-	st, _ := rMa.ValueForProtocol(blema.P_BLE)
-	conns.Store(st, &conn)
-
-	return &conn
 }
 
-// Returns an existing conn
-func getConn(rAddr string) *Conn {
-	c, ok := conns.Load(rAddr)
-	if !ok {
-		return nil
-	}
-	return c.(*Conn)
-}
-
-// Returns an existing reader or create a new one
-func getOrCreateReader(rAddr string) *reader {
-	c, ok := readers.Load(rAddr)
-	if !ok {
-		newReader := &reader{
-			funcSlice: make([]func(*Conn), 0),
+// ReceiveFromDevice is called by native driver when peer's device sent data.
+func ReceiveFromDevice(rAddr string, payload []byte) {
+	// TODO: implement a cleaner way to do that
+	// Checks during 100 ms if the conn is available, because remote device can
+	// be ready to write while local device is still creating the new conn.
+	for i := 0; i < 100; i++ {
+		c, ok := connMap.Load(rAddr)
+		if ok {
+			c.(*Conn).readIn.Write(payload)
+			return
 		}
-		readers.Store(rAddr, newReader)
-		return newReader
+		time.Sleep(1 * time.Millisecond)
 	}
-	return c.(*reader)
-}
 
-// TODO: refactor this and function below
-func makeFunc(tmp []byte) func(c *Conn) {
-	return func(c *Conn) {
-		c.incomingData <- tmp
-	}
-}
-
-func ReceiveFromDevice(rAddr string, b []byte) {
-	tmp := make([]byte, len(b))
-	copy(tmp, b)
-	r := getOrCreateReader(rAddr)
-	r.funcSlice = append(r.funcSlice, makeFunc(tmp))
-	go func() {
-		r.Lock()
-		defer r.Unlock()
-		for {
-			if conn := getConn(rAddr); conn != nil {
-				r.funcSlice[0](conn)
-				r.funcSlice = r.funcSlice[1:]
-				return
-			}
-		}
-	}()
-}
-
-func ConnClosedWithDevice(rAddr string) {
-	if conn := getConn(rAddr); conn != nil {
-		conns.Delete(rAddr)
-		conn.sess.Close()
-	}
+	logger().Error(
+		"connmgr failed to read from conn: unknown conn",
+		zap.String("remote address", rAddr),
+	)
+	bledrv.CloseConnWithDevice(rAddr)
 }
