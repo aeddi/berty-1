@@ -41,11 +41,11 @@ final class DeviceManager {
 
         synchronized (peerDevices) {
             for (PeerDevice peerDevice : peerDevices.values()) {
-                Log.e(TAG, "424242 BEFORE INTERRUPT " + peerDevice.getAddr());
+                Log.e(TAG, "424242 BEFORE INTERRUPT " + peerDevice.getAddr() + " " + peerDevices.containsKey(peerDevice.getAddr()));
                 peerDevice.interruptConnectionThread();
-                Log.e(TAG, "424242 BEFORE REMOVE " + peerDevice.getAddr());
+                Log.e(TAG, "424242 BEFORE REMOVE " + peerDevice.getAddr() + " " + peerDevices.containsKey(peerDevice.getAddr()));
                 peerDevices.remove(peerDevice.getAddr());
-                Log.e(TAG, "424242 AFTER REMOVE " + peerDevice.getAddr());
+                Log.e(TAG, "424242 AFTER REMOVE " + peerDevice.getAddr() + " " + peerDevices.containsKey(peerDevice.getAddr()));
             }
         }
     }
@@ -102,17 +102,18 @@ final class DeviceManager {
             // Could happen if device has fully disconnected and libp2p isn't aware of it
             Log.e(TAG, "writeToDevice() failed: unknown device");
             return false;
-        } else if (!peerDevice.isGattConnected()) {
-            // Could happen if device has GATT disconnected and is reconnecting right now
-            Log.e(TAG, "writeToDevice() failed: device GATT disconnected");
-            return false;
         } else if (!peerDevice.isIdentified()) {
             // Could happen if device has fully disconnected, libp2p isn't aware of it and device is reconnecting right now
             Log.e(TAG, "writeToDevice() failed: device not ready yet");
             return false;
         }
 
-        return peerDevice.writeOnCharacteristic(payload, peerDevice.writerCharacteristic);
+        try {
+            return peerDevice.writeOnCharacteristic(payload, peerDevice.writerCharacteristic);
+        } catch(InterruptedException e) {
+            Log.e(TAG, "writeToDevice() failed: " + e.getMessage());
+            return false;
+        }
     }
 
     public static void closeConnWithDevice(String multiAddr) {

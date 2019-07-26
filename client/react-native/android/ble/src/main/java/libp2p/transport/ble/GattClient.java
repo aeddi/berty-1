@@ -41,17 +41,19 @@ class GattClient extends BluetoothGattCallback {
     public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
         Log.d(TAG, "onConnectionStateChange() client called with gatt: " + gatt + ", status: " + status + ", newState: " + Log.connectionStateToString(newState));
 
-        BluetoothDevice device = gatt.getDevice();
-        PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
+        if (BleManager.isDriverEnabled()) {
+            BluetoothDevice device = gatt.getDevice();
+            PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
 
-        if (peerDevice == null) {
-            Log.i(TAG, "onConnectionStateChange() client: incoming connection from device: " + device.getAddress());
-            peerDevice = new PeerDevice(device);
-            DeviceManager.addDeviceToIndex(peerDevice);
+            if (peerDevice == null) {
+                Log.i(TAG, "onConnectionStateChange() client: incoming connection from device: " + device.getAddress());
+                peerDevice = new PeerDevice(device);
+                DeviceManager.addDeviceToIndex(peerDevice);
+            }
+
+            // Everything is handled in this method: GATT connection/reconnection and handshake if necessary
+            peerDevice.asyncConnectionToDevice("onConnectionStateChange() client state: " + Log.connectionStateToString(newState));
         }
-
-        // Everything is handled in this method: GATT connection/reconnection and handshake if necessary
-        peerDevice.asyncConnectionToDevice("onConnectionStateChange() client state: " + Log.connectionStateToString(newState));
 
         super.onConnectionStateChange(gatt, status, newState);
     }

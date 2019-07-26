@@ -1,6 +1,6 @@
 package libp2p.transport.ble;
 
-import core.Core;
+//import core.Core;
 
 import java.util.UUID;
 import android.os.Build;
@@ -55,16 +55,18 @@ class GattServer extends BluetoothGattServerCallback {
     public void onConnectionStateChange(BluetoothDevice device, int status, int newState) {
         Log.d(TAG, "onConnectionStateChange() server called with device: " + device + ", status: " + status + ", newState: " + Log.connectionStateToString(newState));
 
-        PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
+        if (BleManager.isDriverEnabled()) {
+            PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
 
-        if (peerDevice == null) {
-            Log.i(TAG, "onConnectionStateChange() server: incoming connection from device: " + device.getAddress());
-            peerDevice = new PeerDevice(device);
-            DeviceManager.addDeviceToIndex(peerDevice);
+            if (peerDevice == null) {
+                Log.i(TAG, "onConnectionStateChange() server: incoming connection from device: " + device.getAddress());
+                peerDevice = new PeerDevice(device);
+                DeviceManager.addDeviceToIndex(peerDevice);
+            }
+
+            // Everything is handled in this method: GATT connection/reconnection and handshake if necessary
+            peerDevice.asyncConnectionToDevice("onConnectionStateChange() server state: " + Log.connectionStateToString(newState));
         }
-
-        // Everything is handled in this method: GATT connection/reconnection and handshake if necessary
-        peerDevice.asyncConnectionToDevice("onConnectionStateChange() server state: " + Log.connectionStateToString(newState));
 
         super.onConnectionStateChange(device, status, newState);
     }
@@ -108,7 +110,7 @@ class GattServer extends BluetoothGattServerCallback {
                 return;
             }
 
-            Core.receiveFromDevice(peerDevice.getMultiAddr(), value);
+//            Core.receiveFromDevice(peerDevice.getMultiAddr(), value);
 
             if (responseNeeded) {
                 mBluetoothGattServer.sendResponse(device, requestId, GATT_SUCCESS, offset, value);

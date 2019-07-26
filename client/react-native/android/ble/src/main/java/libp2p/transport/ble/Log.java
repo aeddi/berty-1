@@ -1,6 +1,6 @@
 package libp2p.transport.ble;
 
-import core.Core;
+//import core.Core;
 
 import static android.bluetooth.BluetoothProfile.STATE_DISCONNECTED;
 import static android.bluetooth.BluetoothProfile.STATE_CONNECTING;
@@ -15,19 +15,19 @@ import static android.bluetooth.BluetoothAdapter.STATE_TURNING_OFF;
 final class Log {
 
     static void v(String tag, String log) {
-    Core.goLogger(tag, "verbose", log);
+//    Core.goLogger(tag, "verbose", log);
     }
     static void d(String tag, String log) {
-        Core.goLogger(tag, "debug", log);
+//        Core.goLogger(tag, "debug", log);
     }
     static void i(String tag, String log) {
-        Core.goLogger(tag, "info", log);
+//        Core.goLogger(tag, "info", log);
     }
     static void w(String tag, String log) {
-        Core.goLogger(tag, "warn", log);
+//        Core.goLogger(tag, "warn", log);
     }
     static void e(String tag, String log) {
-        Core.goLogger(tag, "error", log);
+//        Core.goLogger(tag, "error", log);
     }
 
     static String connectionStateToString(int state) {

@@ -96,16 +96,18 @@ class Scanner extends ScanCallback {
     private static void parseResult(ScanResult result) {
         Log.v(TAG, "parseResult() called with device: " + result.getDevice());
 
-        BluetoothDevice device = result.getDevice();
-        PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
+        if (BleManager.isDriverEnabled()) {
+            BluetoothDevice device = result.getDevice();
+            PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
 
-        if (peerDevice == null) {
-            Log.i(TAG, "parseResult() scanned a new device: " + device.getAddress());
-            peerDevice = new PeerDevice(device);
-            DeviceManager.addDeviceToIndex(peerDevice);
+            if (peerDevice == null) {
+                Log.i(TAG, "parseResult() scanned a new device: " + device.getAddress());
+                peerDevice = new PeerDevice(device);
+                DeviceManager.addDeviceToIndex(peerDevice);
 
-            // Everything is handled in this method: GATT connection/reconnection and handshake if necessary
-            peerDevice.asyncConnectionToDevice("parseResult()");
+                // Everything is handled in this method: GATT connection/reconnection and handshake if necessary
+                peerDevice.asyncConnectionToDevice("parseResult()");
+            }
         }
     }
 }

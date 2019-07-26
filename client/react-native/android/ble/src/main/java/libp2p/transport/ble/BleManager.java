@@ -44,7 +44,7 @@ public final class BleManager {
     private BleManager() {}
 
     private static BluetoothStateWatcher bleStateWatcher;
-
+    private static boolean driverEnabled;
     private static boolean advertising;
     private static boolean scanning;
 
@@ -69,6 +69,7 @@ public final class BleManager {
     private static final BluetoothGattCharacteristic peerIDCharacteristic = new BluetoothGattCharacteristic(PEER_ID_UUID, PROPERTY_WRITE, PERMISSION_WRITE);
     private static final BluetoothGattCharacteristic writerCharacteristic = new BluetoothGattCharacteristic(WRITER_UUID, PROPERTY_WRITE, PERMISSION_WRITE);
 
+    static boolean isDriverEnabled() { return driverEnabled; }
 
     static String getMultiAddr() { return maCharacteristic.getStringValue(0); }
 
@@ -121,7 +122,6 @@ public final class BleManager {
     static class BluetoothStateWatcher extends BroadcastReceiver {
         private static final String TAG = "ble_manager.watcher";
 
-        private static boolean driverEnabled;
         private static Semaphore enableDriverLock = new Semaphore(1);
         private static Semaphore disableDriverLock = new Semaphore(1);
 
@@ -143,7 +143,7 @@ public final class BleManager {
             }
         }
 
-        private void enableDriver() {
+        private static void enableDriver() {
             Log.d(TAG, "enableDriver() called");
 
             if (!driverEnabled) {
@@ -181,12 +181,15 @@ public final class BleManager {
             }
         }
 
-        private void disableDriver() {
+        private static void disableDriver() {
             Log.d(TAG, "disableDriver() called");
 
             if (driverEnabled) {
                 if (disableDriverLock.tryAcquire()) {
                     new Thread(() -> {
+                        scanning = false;
+                        advertising = false;
+                        driverEnabled = false;
                         try {
                             Log.d(TAG, "424242 disableDriver() BEFORE CLOSE GATT");
                             mGattServerCallback.closeGattServer();
@@ -196,9 +199,6 @@ public final class BleManager {
                         } catch (Exception e) {
                             Log.e(TAG, "disableDriver() failed: " + e.getMessage());
                         }
-                        scanning = false;
-                        advertising = false;
-                        driverEnabled = false;
                         disableDriverLock.release();
                     }).start();
                 } else {

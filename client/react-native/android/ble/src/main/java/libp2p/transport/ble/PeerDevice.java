@@ -1,6 +1,6 @@
 package libp2p.transport.ble;
 
-import core.Core;
+//import core.Core;
 
 import android.os.Build;
 import android.content.Context;
@@ -90,6 +90,7 @@ class PeerDevice {
     private final List<byte[]> toSend = new ArrayList<>();
 
     private Thread connectionThread;
+    private Thread handshakeThread;
 
 
     PeerDevice(BluetoothDevice device) {
@@ -135,7 +136,16 @@ class PeerDevice {
             Log.d(TAG, "interruptConnectionThread() called for device: " + dDevice + " for thread: " + connectionThread.getId());
             connectionThread.interrupt();
         } else {
-            Log.d(TAG, "interruptConnectionThread() skipped: no running thread for device: " + dDevice);
+            Log.d(TAG, "interruptConnectionThread() skipped: no running connection thread for device: " + dDevice);
+        }
+    }
+
+    void interruptHandshakeThread() {
+        if (handshakeThread != null) {
+            Log.d(TAG, "interruptHandshakeThread() called for device: " + dDevice + " for thread: " + handshakeThread.getId());
+            handshakeThread.interrupt();
+        } else {
+            Log.d(TAG, "interruptHandshakeThread() skipped: no running handshake thread for device: " + dDevice);
         }
     }
 
@@ -153,6 +163,8 @@ class PeerDevice {
                 try {
                     if (connectGatt(callerAndThread)) {
                         Thread.sleep(waitAfterHandshakeAndGattConnectAttempt);
+                        handshakeThread = connectionThread;
+                        connectionThread = null;
                         lockConnAttempt.release(); // Released now because it could be useful to reconnect during handshake
 
                         if (!identified) {
@@ -169,7 +181,7 @@ class PeerDevice {
                                         Thread.sleep(300); // Wait for new MTU before starting the libp2p connect
                                     }
 
-                                    if (Core.handlePeerFound(dPeerID, dMultiAddr)) {
+if(true){//                                    if (Core.handlePeerFound(dPeerID, dMultiAddr)) {
                                         Log.i(TAG, "asyncConnectionToDevice() peer handled successfully by golang with device: " + dDevice + ", caller: " + callerAndThread);
                                     } else {
                                         Log.e(TAG, "asyncConnectionToDevice() failed: golang can't handle new peer for device: " + dDevice + ", caller: " + callerAndThread);
@@ -209,11 +221,16 @@ class PeerDevice {
                     }
                 }
                 connectionThread = null;
+                handshakeThread = null;
             });
             connectionThread.start();
         } else {
             Log.w(TAG, "asyncConnectionToDevice() skipped GATT connection attempt: already running for device: " + dDevice + ", caller: " + caller);
         }
+    }
+
+    private void asyncHandshakeWithDevice() {
+
     }
 
     // Disconnect device and remove it from index
@@ -239,79 +256,54 @@ class PeerDevice {
         if (dGatt == null) {
             Context context = BleManager.getContext();
             if (context == null) {
-                throw new Exception("cant retrieve context");
+                throw new Exception("setGatt() cant retrieve context");
             }
 
             dGatt = dDevice.connectGatt(BleManager.getContext(), false, BleManager.getGattCallback());
         }
     }
 
-    private boolean connectGatt(String caller) {
+    private boolean connectGatt(String caller) throws Exception {
         Log.i(TAG, "connectGatt() called for device: " + dDevice + ", caller: " + caller);
 
-        try {
-            for (int attempt = 0; attempt < gattConnectMaxAttempts; attempt++) {
-                Log.d(TAG, "connectGatt() attempt: " + (attempt + 1) + "/" + gattConnectMaxAttempts + ", device: " + dDevice + ", client state: " + Log.connectionStateToString(getGattClientState()) + ", server state: "  + Log.connectionStateToString(getGattServerState()));
+        for (int attempt = 0; attempt < gattConnectMaxAttempts; attempt++) {
+            Log.d(TAG, "connectGatt() attempt: " + (attempt + 1) + "/" + gattConnectMaxAttempts + ", device: " + dDevice + ", client state: " + Log.connectionStateToString(getGattClientState()) + ", server state: "  + Log.connectionStateToString(getGattServerState()));
 
-                Log.i(TAG, "424242 CONNECT1 THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
-                if (Thread.interrupted()) {
-                    Log.e(TAG, "424242 INTERRUPTION CONNECTGATT");
-                    throw new InterruptedException("connectGatt() thread interrupted");
-                } else if (Thread.currentThread().isInterrupted()) {
-                    Log.e(TAG, "424242 CURRENT INTERRUPTION CONNECTGATT");
-                    throw new InterruptedException("connectGatt() thread interrupted");
-                }
+            if (Thread.interrupted()) throw new InterruptedException("connectGatt() thread interrupted");
 
-                setGatt();
-                Thread.sleep(waitAfterGattSetup);
-                dGatt.connect();
+            setGatt();
+            Thread.sleep(waitAfterGattSetup);
+            dGatt.connect();
 
-                for (int gattWaitConnectAttempt = 0; gattWaitConnectAttempt < gattWaitConnectMaxAttempts; gattWaitConnectAttempt++) {
-                    Log.d(TAG, "connectGatt() wait " + gattWaitConnectAttemptTimeout + "ms (disconnected state) " + (gattWaitConnectAttempt + 1) + "/" + gattWaitConnectMaxAttempts + " for device: " + dDevice);
-                    Thread.sleep(gattWaitConnectAttemptTimeout);
+            for (int gattWaitConnectAttempt = 0; gattWaitConnectAttempt < gattWaitConnectMaxAttempts; gattWaitConnectAttempt++) {
+                Log.d(TAG, "connectGatt() wait " + gattWaitConnectAttemptTimeout + "ms (disconnected state) " + (gattWaitConnectAttempt + 1) + "/" + gattWaitConnectMaxAttempts + " for device: " + dDevice);
+                Thread.sleep(gattWaitConnectAttemptTimeout);
 
-                    Log.i(TAG, "424242 CONNECT2 THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
-                    if (Thread.interrupted()) {
-                        Log.e(TAG, "424242 INTERRUPTION CONNECTGATT");
-                        throw new InterruptedException("connectGatt() thread interrupted");
-                    } else if (Thread.currentThread().isInterrupted()) {
-                        Log.e(TAG, "424242 CURRENT INTERRUPTION CONNECTGATT");
-                        throw new InterruptedException("connectGatt() thread interrupted");
-                    }
+                if (Thread.interrupted()) throw new InterruptedException("connectGatt() thread interrupted");
 
-                    if (getGattClientState() == STATE_CONNECTING || getGattServerState() == STATE_CONNECTING) {
-                        for (int gattConnectingAttempt = 0; gattConnectingAttempt < gattConnectingMaxAttempts && !Thread.currentThread().isInterrupted(); gattConnectingAttempt++) {
-                            Log.d(TAG, "connectGatt() wait " + gattConnectingAttemptTimeout + "ms (connecting state) " + (gattConnectingAttempt + 1) + "/" + gattConnectingMaxAttempts + " for device: " + dDevice);
-                            Thread.sleep(gattConnectingAttemptTimeout);
+                if (getGattClientState() == STATE_CONNECTING || getGattServerState() == STATE_CONNECTING) {
+                    for (int gattConnectingAttempt = 0; gattConnectingAttempt < gattConnectingMaxAttempts && !Thread.currentThread().isInterrupted(); gattConnectingAttempt++) {
+                        Log.d(TAG, "connectGatt() wait " + gattConnectingAttemptTimeout + "ms (connecting state) " + (gattConnectingAttempt + 1) + "/" + gattConnectingMaxAttempts + " for device: " + dDevice);
+                        Thread.sleep(gattConnectingAttemptTimeout);
 
-                            Log.i(TAG, "424242 CONNECT3 THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
-                            if (Thread.interrupted()) {
-                                Log.e(TAG, "424242 INTERRUPTION CONNECTGATT");
-                                throw new InterruptedException("connectGatt() thread interrupted");
-                            } else if (Thread.currentThread().isInterrupted()) {
-                                Log.e(TAG, "424242 CURRENT INTERRUPTION CONNECTGATT");
-                                throw new InterruptedException("connectGatt() thread interrupted");
-                            }
+                        if (Thread.interrupted()) throw new InterruptedException("connectGatt() thread interrupted");
 
-                            if (isGattConnected()) {
-                                break;
-                            }
+                        if (isGattConnected()) {
+                            break;
                         }
                     }
-
-                    if (isGattConnected()) {
-                        Log.i(TAG, "connectGatt() succeeded for device: " + dDevice + " caller: " + caller);
-                        return true;
-                    }
                 }
-                disconnectGatt();
-                Thread.sleep(waitAfterGattDisconnect);
-            }
 
-            Log.e(TAG, "connectGatt() failed for device: " + dDevice);
-        } catch (Exception e) {
-            Log.e(TAG, "connectGatt() failed: " + e.getMessage() + " for device: " + dDevice);
+                if (isGattConnected()) {
+                    Log.i(TAG, "connectGatt() succeeded for device: " + dDevice + " caller: " + caller);
+                    return true;
+                }
+            }
+            disconnectGatt();
+            Thread.sleep(waitAfterGattDisconnect);
         }
+
+        Log.e(TAG, "connectGatt() failed for device: " + dDevice);
 
         return false;
     }
@@ -372,7 +364,7 @@ class PeerDevice {
 
 
     // Check if remote device is Libp2p compliant then, if yes, two-way exchange MultiAddr and PeerID
-    private boolean libp2pHandshake(String caller) {
+    private boolean libp2pHandshake(String caller) throws Exception {
         Log.i(TAG, "libp2pHandshake() called for device: " + dDevice + ", caller: " + caller);
 
         if (checkPeerDeviceLibp2pCompliance() && sendInfosToRemoteDevice() && receiveInfosFromRemoteDevice()) {
@@ -387,7 +379,7 @@ class PeerDevice {
 
 
     // Wait for discovery and check if service and characteristics are Libp2p device compliant
-    private boolean checkPeerDeviceLibp2pCompliance() {
+    private boolean checkPeerDeviceLibp2pCompliance() throws Exception {
         Log.d(TAG, "checkPeerDeviceLibp2pCompliance() called for device: " + dDevice);
 
         if (checkLibp2pServiceCompliance() && checkLibp2pCharacteristicsCompliance()) {
@@ -400,50 +392,39 @@ class PeerDevice {
         return false;
     }
 
-    private boolean checkLibp2pServiceCompliance() {
+    private boolean checkLibp2pServiceCompliance() throws InterruptedException {
         Log.d(TAG, "checkLibp2pServiceCompliance() called for device: " + dDevice);
 
-        try {
-            // Wait for services discovery started
-            for (int servDiscoveryAttempt = 0; servDiscoveryAttempt < servDiscoveryMaxAttempts && !dGatt.discoverServices(); servDiscoveryAttempt++) {
+        // Wait for services discovery started
+        for (int servDiscoveryAttempt = 0; servDiscoveryAttempt < servDiscoveryMaxAttempts && !dGatt.discoverServices(); servDiscoveryAttempt++) {
 
-                Log.i(TAG, "424242 CHECKSERV THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
-                if (Thread.interrupted()) {
-                    Log.e(TAG, "424242 SERV COMP");
-                    throw new InterruptedException("checkLibp2pServiceCompliance() thread interrupted");
-                } else if (Thread.currentThread().isInterrupted()) {
-                    Log.e(TAG, "424242 CURRENT SERV COMP");
-                    throw new InterruptedException("checkLibp2pServiceCompliance() thread interrupted");
-                }
+            if (Thread.interrupted()) throw new InterruptedException("checkLibp2pServiceCompliance() thread interrupted");
 
-                if (isGattConnected()) {
-                    Log.d(TAG, "checkLibp2pServiceCompliance() device " + dDevice + " GATT is connected, waiting for service discovery: " + servDiscoveryAttempt + "/" + servDiscoveryMaxAttempts);
-                    Thread.sleep(servDiscoveryAttemptTimeout);
-                } else {
-                    Log.e(TAG, "checkLibp2pServiceCompliance() failed: device " + dDevice + " GATT is disconnected");
-                    return false;
-                }
-            }
-
-            // Wait for services discovery completed and check that Libp2p service is found
-            if (waitServiceCheck.tryAcquire(servCheckTimeout, TimeUnit.MILLISECONDS)) {
-                if (libp2pService != null) {
-                    Log.i(TAG, "checkLibp2pServiceCompliance() succeeded for device: " + dDevice);
-                    return true;
-                } else {
-                    Log.e(TAG, "checkLibp2pServiceCompliance() failed: Libp2p service not found on device: " + dDevice);
-                }
+            if (isGattConnected()) {
+                Log.d(TAG, "checkLibp2pServiceCompliance() device " + dDevice + " GATT is connected, waiting for service discovery: " + servDiscoveryAttempt + "/" + servDiscoveryMaxAttempts);
+                Thread.sleep(servDiscoveryAttemptTimeout);
             } else {
-                Log.e(TAG, "checkLibp2pServiceCompliance() timeouted for device: " + dDevice);
+                Log.e(TAG, "checkLibp2pServiceCompliance() failed: device " + dDevice + " GATT is disconnected");
+                return false;
             }
-        } catch (Exception e) {
-            Log.e(TAG, "checkLibp2pServiceCompliance() failed: " + e.getMessage() + ", for device: " + dDevice);
+        }
+
+        // Wait for services discovery completed and check that Libp2p service is found
+        if (waitServiceCheck.tryAcquire(servCheckTimeout, TimeUnit.MILLISECONDS)) {
+            if (libp2pService != null) {
+                Log.i(TAG, "checkLibp2pServiceCompliance() succeeded for device: " + dDevice);
+                return true;
+            } else {
+                Log.e(TAG, "checkLibp2pServiceCompliance() failed: Libp2p service not found on device: " + dDevice);
+            }
+        } else {
+            Log.e(TAG, "checkLibp2pServiceCompliance() timeouted for device: " + dDevice);
         }
 
         return false;
     }
 
-    private boolean checkLibp2pCharacteristicsCompliance() {
+    private boolean checkLibp2pCharacteristicsCompliance() throws Exception {
         Log.d(TAG, "checkLibp2pCharacteristicsCompliance() called for device: " + dDevice);
 
         class PopulateCharacteristic implements Callable<BluetoothGattCharacteristic> {
@@ -467,42 +448,34 @@ class PeerDevice {
         todo.add(new PopulateCharacteristic(BleManager.PEER_ID_UUID));
         todo.add(new PopulateCharacteristic(BleManager.WRITER_UUID));
 
-        try {
-            List<Future<BluetoothGattCharacteristic>> answers = es.invokeAll(todo);
-            for (Future<BluetoothGattCharacteristic> future : answers) {
-                BluetoothGattCharacteristic characteristic = future.get(charDiscoveryTimeout, TimeUnit.MILLISECONDS);
+        List<Future<BluetoothGattCharacteristic>> answers = es.invokeAll(todo);
+        for (Future<BluetoothGattCharacteristic> future : answers) {
+            BluetoothGattCharacteristic characteristic = future.get(charDiscoveryTimeout, TimeUnit.MILLISECONDS);
 
-                Log.i(TAG, "424242 CHECKCHAR THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
-                if (Thread.interrupted()) {
-                    Log.e(TAG, "424242 CHAR COMP");
-                    throw new InterruptedException("checkLibp2pCharacteristicsCompliance() thread interrupted");
-                }
+            if (Thread.interrupted()) throw new InterruptedException("checkLibp2pCharacteristicsCompliance() thread interrupted");
 
-                if (characteristic != null && characteristic.getUuid().equals(BleManager.MA_UUID)) {
-                    Log.d(TAG, "checkLibp2pCharacteristicsCompliance() MultiAddr characteristic retrieved: " + characteristic + " on device: " + dDevice);
-                    maCharacteristic = characteristic;
-                } else if (characteristic != null && characteristic.getUuid().equals(BleManager.PEER_ID_UUID)) {
-                    Log.d(TAG, "checkLibp2pCharacteristicsCompliance() PeerID characteristic retrieved: " + characteristic + " on device: " + dDevice);
-                    peerIDCharacteristic = characteristic;
-                } else if (characteristic != null && characteristic.getUuid().equals(BleManager.WRITER_UUID)) {
-                    Log.d(TAG, "checkLibp2pCharacteristicsCompliance() Writer characteristic retrieved: " + characteristic + " on device: " + dDevice);
-                    writerCharacteristic = characteristic;
-                } else if (characteristic == null) {
-                    Log.e(TAG, "checkLibp2pCharacteristicsCompliance() timeouted on device: " + dDevice);
-                    break;
-                } else {
-                    Log.e(TAG, "checkLibp2pCharacteristicsCompliance() unknown characteristic retrieved: " + characteristic + " on device: " + dDevice);
-                }
-            }
-
-            if (maCharacteristic != null && peerIDCharacteristic != null && writerCharacteristic != null) {
-                Log.i(TAG, "checkLibp2pCharacteristicsCompliance() succeeded for device: " + dDevice);
-                return true;
+            if (characteristic != null && characteristic.getUuid().equals(BleManager.MA_UUID)) {
+                Log.d(TAG, "checkLibp2pCharacteristicsCompliance() MultiAddr characteristic retrieved: " + characteristic + " on device: " + dDevice);
+                maCharacteristic = characteristic;
+            } else if (characteristic != null && characteristic.getUuid().equals(BleManager.PEER_ID_UUID)) {
+                Log.d(TAG, "checkLibp2pCharacteristicsCompliance() PeerID characteristic retrieved: " + characteristic + " on device: " + dDevice);
+                peerIDCharacteristic = characteristic;
+            } else if (characteristic != null && characteristic.getUuid().equals(BleManager.WRITER_UUID)) {
+                Log.d(TAG, "checkLibp2pCharacteristicsCompliance() Writer characteristic retrieved: " + characteristic + " on device: " + dDevice);
+                writerCharacteristic = characteristic;
+            } else if (characteristic == null) {
+                Log.e(TAG, "checkLibp2pCharacteristicsCompliance() timeouted on device: " + dDevice);
+                break;
             } else {
-                Log.e(TAG, "checkLibp2pCharacteristicsCompliance() failed: can't retrieve Libp2p characteristics on device: " + dDevice + ", maCharacteristic: " + maCharacteristic + ", peerIDCharacteristic: " + peerIDCharacteristic + ", writerCharacteristic: " + writerCharacteristic);
+                Log.e(TAG, "checkLibp2pCharacteristicsCompliance() unknown characteristic retrieved: " + characteristic + " on device: " + dDevice);
             }
-        } catch (Exception e) {
-            Log.e(TAG, "checkLibp2pCharacteristicsCompliance() failed: " + e.getMessage() + " for device: " + dDevice);
+        }
+
+        if (maCharacteristic != null && peerIDCharacteristic != null && writerCharacteristic != null) {
+            Log.i(TAG, "checkLibp2pCharacteristicsCompliance() succeeded for device: " + dDevice);
+            return true;
+        } else {
+            Log.e(TAG, "checkLibp2pCharacteristicsCompliance() failed: can't retrieve Libp2p characteristics on device: " + dDevice + ", maCharacteristic: " + maCharacteristic + ", peerIDCharacteristic: " + peerIDCharacteristic + ", writerCharacteristic: " + writerCharacteristic);
         }
 
         return false;
@@ -510,7 +483,7 @@ class PeerDevice {
 
 
     // Send own MultiAddress and PeerID to remote device
-    private boolean sendInfosToRemoteDevice() {
+    private boolean sendInfosToRemoteDevice() throws InterruptedException {
         Log.d(TAG, "sendInfosToRemoteDevice() called for device: " + dDevice);
 
         if (writeOnCharacteristic(BleManager.getMultiAddr().getBytes(), maCharacteristic)) {
@@ -528,89 +501,64 @@ class PeerDevice {
     }
 
     // Wait reception of MultiAddress and PeerID from remote device
-    private boolean receiveInfosFromRemoteDevice() {
+    private boolean receiveInfosFromRemoteDevice() throws InterruptedException {
         Log.d(TAG, "receiveInfosFromRemoteDevice() called for device: " + dDevice);
 
-        try {
-            if (infosReceived.await(waitInfosReceptionTimeout, TimeUnit.MILLISECONDS)) {
-                Log.i(TAG, "receiveInfosFromRemoteDevice() succeeded for device: " + dDevice);
-                return true;
-            }
-            Log.e(TAG, "receiveInfosFromRemoteDevice() timeouted for device: " + dDevice + ", MultiAddr: " + dMultiAddr + ", PeerID: " + dPeerID);
-        } catch (Exception e) {
-            Log.e(TAG, "receiveInfosFromRemoteDevice() failed: " + e.getMessage() + ", for device: " + dDevice);
+        if (infosReceived.await(waitInfosReceptionTimeout, TimeUnit.MILLISECONDS)) {
+            Log.i(TAG, "receiveInfosFromRemoteDevice() succeeded for device: " + dDevice);
+            return true;
         }
+        Log.e(TAG, "receiveInfosFromRemoteDevice() timeouted for device: " + dDevice + ", MultiAddr: " + dMultiAddr + ", PeerID: " + dPeerID);
 
         return false;
     }
 
 
     // Write a blob on a specific remote device characteristic
-    boolean writeOnCharacteristic(byte[] payload, BluetoothGattCharacteristic characteristic) {
+    boolean writeOnCharacteristic(byte[] payload, BluetoothGattCharacteristic characteristic) throws InterruptedException {
         Log.d(TAG, "writeOnCharacteristic() called for device: " + dDevice);
 
-        try {
-            synchronized (toSend) {
-                int length = payload.length;
-                int offset = 0;
+        synchronized (toSend) {
+            int length = payload.length;
+            int offset = 0;
 
-                do {
-                    // BLE protocol reserves 3 bytes out of MTU_SIZE for metadata
-                    // https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html#gatt_writes
-                    int chunkSize = (length - offset > dMtu - 3) ? dMtu - 3 : length - offset;
-                    byte[] chunk = Arrays.copyOfRange(payload, offset, offset + chunkSize);
-                    offset += chunkSize;
-                    toSend.add(chunk);
-                } while (offset < length);
+            do {
+                // BLE protocol reserves 3 bytes out of MTU_SIZE for metadata
+                // https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html#gatt_writes
+                int chunkSize = (length - offset > dMtu - 3) ? dMtu - 3 : length - offset;
+                byte[] chunk = Arrays.copyOfRange(payload, offset, offset + chunkSize);
+                offset += chunkSize;
+                toSend.add(chunk);
+            } while (offset < length);
 
-                while (!toSend.isEmpty()) {
-                    Log.i(TAG, "424242 WRITE1 THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
-                    if (Thread.interrupted()) {
-                        Log.e(TAG, "424242 WRITE");
-                        throw new InterruptedException("writeOnCharacteristic() thread interrupted");
-                    } else if (Thread.currentThread().isInterrupted()) {
-                        Log.e(TAG, "424242 CURRENT WRITE");
-                        throw new InterruptedException("writeOnCharacteristic() thread interrupted");
-                    }
+            while (!toSend.isEmpty()) {
+                characteristic.setValue(toSend.get(0));
+                for (int attempt = 0; dGatt != null && !dGatt.writeCharacteristic(characteristic); attempt++) {
+                    if (Thread.interrupted()) throw new InterruptedException("writeOnCharacteristic() thread interrupted");
 
-                    characteristic.setValue(toSend.get(0));
-                    for (int attempt = 0; dGatt != null && !dGatt.writeCharacteristic(characteristic); attempt++) {
-                        Log.i(TAG, "424242 WRITE2 THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
-                        if (Thread.interrupted()) {
-                            Log.e(TAG, "424242 WRITE");
-                            throw new InterruptedException("writeOnCharacteristic() thread interrupted");
-                        } else if (Thread.currentThread().isInterrupted()) {
-                            Log.e(TAG, "424242 CURRENT WRITE");
-                            throw new InterruptedException("writeOnCharacteristic() thread interrupted");
-                        }
-
-                        if (attempt == initWriteMaxAttempts) {
-                            Log.e(TAG, "writeOnCharacteristic() wait for write init timeouted for device: " + dDevice);
-                            return false;
-                        }
-
-                        Log.v(TAG, "writeOnCharacteristic() wait for write init: " + (attempt + 1) + "/" + initWriteMaxAttempts + ", device: " + dDevice);
-                        Thread.sleep(initWriteAttemptTimeout);
-                    }
-
-                    if (dGatt == null) {
-                        Log.e(TAG, "writeOnCharacteristic() device disconnected during write operation: " + dDevice);
+                    if (attempt == initWriteMaxAttempts) {
+                        Log.e(TAG, "writeOnCharacteristic() wait for write init timeouted for device: " + dDevice);
                         return false;
                     }
 
-                    if (!waitWriteDone.tryAcquire(writeDoneTimeout, TimeUnit.MILLISECONDS)) {
-                        Log.e(TAG, "writeOnCharacteristic() timeouted for device: " + dDevice);
-                        return false;
-                    }
-
-                    toSend.remove(0);
+                    Log.v(TAG, "writeOnCharacteristic() wait for write init: " + (attempt + 1) + "/" + initWriteMaxAttempts + ", device: " + dDevice);
+                    Thread.sleep(initWriteAttemptTimeout);
                 }
-                Log.d(TAG, "writeOnCharacteristic() succeeded for device: " + dDevice + " with payload: " + new String(payload));
-                return true;
+
+                if (dGatt == null) {
+                    Log.e(TAG, "writeOnCharacteristic() device disconnected during write operation: " + dDevice);
+                    return false;
+                }
+
+                if (!waitWriteDone.tryAcquire(writeDoneTimeout, TimeUnit.MILLISECONDS)) {
+                    Log.e(TAG, "writeOnCharacteristic() timeouted for device: " + dDevice);
+                    return false;
+                }
+
+                toSend.remove(0);
             }
-        } catch (Exception e) {
-            Log.e(TAG, "writeOnCharacteristic() failed: " + e.getMessage() + " for device: " + dDevice);
-            return false;
+            Log.d(TAG, "writeOnCharacteristic() succeeded for device: " + dDevice + " with payload: " + new String(payload));
+            return true;
         }
     }
 }
