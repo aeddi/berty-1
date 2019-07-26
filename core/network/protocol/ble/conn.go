@@ -9,6 +9,7 @@ import (
 
 	bledrv "berty.tech/core/network/protocol/ble/driver"
 	blema "berty.tech/core/network/protocol/ble/multiaddr"
+	"go.uber.org/zap"
 
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
@@ -35,14 +36,20 @@ type Conn struct {
 // Read reads data from the connection.
 // Timeout handled by the native driver.
 func (c *Conn) Read(payload []byte) (n int, err error) {
+	logger().Debug("READ CALLED 424242", zap.Int("want", len(payload)))
+	defer logger().Debug("READ ENDED 424242")
 	if c.ctx.Err() != nil {
+		logger().Error("READ ERR ALREADY CLOSED 424242")
 		return 0, fmt.Errorf("conn read failed: conn already closed")
 	}
 
 	n, err = c.readOut.Read(payload)
 	if err != nil {
+		logger().Error("READ ERR", zap.Error(err))
 		err = errors.Wrap(err, "conn read failed")
 	}
+
+	logger().Debug("READ DONE 424242", zap.Int("have", len(payload)), zap.ByteString("payload", payload))
 
 	return n, err
 }
@@ -50,12 +57,16 @@ func (c *Conn) Read(payload []byte) (n int, err error) {
 // Write writes data to the connection.
 // Timeout handled by the native driver.
 func (c *Conn) Write(payload []byte) (n int, err error) {
+	logger().Debug("WRITE CALLED 424242", zap.Int("want", len(payload)))
+	defer logger().Debug("WRITE ENDED 424242", zap.Int("have", n))
 	if c.ctx.Err() != nil {
+		logger().Error("WRITE ERR ALREADY CLOSED 424242")
 		return 0, fmt.Errorf("conn write failed: conn already closed")
 	}
 
 	// Write to the peer's device using native driver.
 	if bledrv.SendToDevice(c.RemoteAddr().String(), payload) == false {
+		logger().Error("WRITE ERR NATIVE FAILED 424242")
 		return 0, fmt.Errorf("conn write failed: native write failed")
 	}
 
@@ -65,6 +76,8 @@ func (c *Conn) Write(payload []byte) (n int, err error) {
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (c *Conn) Close() error {
+	logger().Debug("CLOSE CALLED 424242")
+	defer logger().Debug("CLOSE ENDED 424242")
 	c.cancel()
 
 	// Closes read pipe

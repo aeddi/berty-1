@@ -15,10 +15,9 @@ final class DeviceManager {
 
     // Index management
     static void addDeviceToIndex(PeerDevice peerDevice) {
-        Log.d(TAG, "addDeviceToIndex() called with device: " + peerDevice + ", current index size: " + peerDevices.size() + ", new index size: " + (peerDevices.size() + 1));
-
         synchronized (peerDevices) {
             if (!peerDevices.containsKey(peerDevice.getAddr())) {
+                Log.d(TAG, "addDeviceToIndex() called with device: " + peerDevice.getAddr() + ", current index size: " + peerDevices.size() + ", new index size: " + (peerDevices.size() + 1));
                 peerDevices.put(peerDevice.getAddr(), peerDevice);
             } else {
                 Log.e(TAG, "addDeviceToIndex() device already in index: " + peerDevice.getAddr());
@@ -27,13 +26,26 @@ final class DeviceManager {
     }
 
     static void removeDeviceFromIndex(PeerDevice peerDevice) {
-        Log.d(TAG, "removeDeviceFromIndex() called with device: " + peerDevice + ", current index size: " + peerDevices.size() + ", new index size: " + (peerDevices.size() - 1));
-
         synchronized (peerDevices) {
             if (peerDevices.containsKey(peerDevice.getAddr())) {
+                Log.d(TAG, "removeDeviceFromIndex() called with device: " + peerDevice.getAddr() + ", current index size: " + peerDevices.size() + ", new index size: " + (peerDevices.size() - 1));
                 peerDevices.remove(peerDevice.getAddr());
             } else {
                 Log.e(TAG, "removeDeviceFromIndex() device not found in index: " + peerDevice.getAddr());
+            }
+        }
+    }
+
+    static void disconnectFromAllDevices() {
+        Log.d(TAG, "disconnectFromAllDevices() called from thread: " + Thread.currentThread().getId());
+
+        synchronized (peerDevices) {
+            for (PeerDevice peerDevice : peerDevices.values()) {
+                Log.e(TAG, "424242 BEFORE INTERRUPT " + peerDevice.getAddr());
+                peerDevice.interruptConnectionThread();
+                Log.e(TAG, "424242 BEFORE REMOVE " + peerDevice.getAddr());
+                peerDevices.remove(peerDevice.getAddr());
+                Log.e(TAG, "424242 AFTER REMOVE " + peerDevice.getAddr());
             }
         }
     }
@@ -58,11 +70,8 @@ final class DeviceManager {
         Log.d(TAG, "getDeviceFromMultiAddr() called with MultiAddr: " + multiAddr);
 
         synchronized (peerDevices) {
-            PeerDevice peerDevice;
-
-            for (Map.Entry<String, PeerDevice> entry : peerDevices.entrySet()) {
-                peerDevice = entry.getValue();
-                if (peerDevice != null && peerDevice.getMultiAddr() != null && peerDevice.getMultiAddr().equals(multiAddr)) {
+            for (PeerDevice peerDevice : peerDevices.values()) {
+                if (peerDevice.getMultiAddr() != null && peerDevice.getMultiAddr().equals(multiAddr)) {
                     return peerDevice;
                 }
             }
@@ -112,7 +121,8 @@ final class DeviceManager {
         PeerDevice peerDevice = getDeviceFromMultiAddr(multiAddr);
 
         if (peerDevice != null) {
-            peerDevice.asyncDisconnectFromDevice("libp2p request");
+            peerDevice.interruptConnectionThread();
+            peerDevice.disconnectFromDevice("libp2p request");
         } else {
             Log.e(TAG, "disconnectFromDevice() failed: unknown device");
         }

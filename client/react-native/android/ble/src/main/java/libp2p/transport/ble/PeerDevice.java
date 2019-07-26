@@ -35,9 +35,9 @@ class PeerDevice {
     private static final String TAG = "device";
 
     // Timeout and maximum attempts for GATT connection
-    private static final int gattConnectMaxAttempts = 20;
+    private static final int gattConnectMaxAttempts = 10;
     private static final int gattWaitConnectAttemptTimeout = 420;
-    private static final int gattWaitConnectMaxAttempts = 10;
+    private static final int gattWaitConnectMaxAttempts = 20;
     private static final int gattConnectingAttemptTimeout = 240;
     private static final int gattConnectingMaxAttempts = 5;
     private static final int waitAfterHandshakeAndGattConnectAttempt = 2000;
@@ -89,6 +89,8 @@ class PeerDevice {
 
     private final List<byte[]> toSend = new ArrayList<>();
 
+    private Thread connectionThread;
+
 
     PeerDevice(BluetoothDevice device) {
         dAddr = device.getAddress();
@@ -104,23 +106,14 @@ class PeerDevice {
         Log.d(TAG, "setMultiAddr() called for device: " + dDevice + " with current multiAddr: " + dMultiAddr + ", new multiAddr: " + multiAddr);
 
         dMultiAddr = multiAddr;
-
-        if (dMultiAddr.length() > 36) {
-            Log.e(TAG, "setMultiAddr() error: MultiAddr can't be greater than 36 bytes, string will be truncated. Device: " + dDevice);
-            dMultiAddr = dMultiAddr.substring(0, 35);
-        }
     }
 
     String getMultiAddr() { return dMultiAddr; }
 
     void setPeerID(String peerID) {
         Log.d(TAG, "setPeerID() called for device: " + dDevice + " with current peerID: " + dPeerID + ", new peerID: " + peerID);
-        dPeerID = peerID;
 
-        if (dPeerID.length() > 46) {
-            Log.e(TAG, "setPeerID() error: PeerID can't be greater than 46 bytes, string will be truncated. Device: " + dDevice);
-            dPeerID = dPeerID.substring(0, 45);
-        }
+        dPeerID = peerID;
     }
 
     String getPeerID() { return dPeerID; }
@@ -137,12 +130,21 @@ class PeerDevice {
         return identified;
     }
 
+    void interruptConnectionThread() {
+        if (connectionThread != null) {
+            Log.d(TAG, "interruptConnectionThread() called for device: " + dDevice + " for thread: " + connectionThread.getId());
+            connectionThread.interrupt();
+        } else {
+            Log.d(TAG, "interruptConnectionThread() skipped: no running thread for device: " + dDevice);
+        }
+    }
+
     // Attempt to (re)connect GATT then, if device isn't already identified, init Libp2p handshake
     void asyncConnectionToDevice(final String caller) {
         Log.d(TAG, "asyncConnectionToDevice() called for device: " + dDevice + ", caller: " + caller);
 
-        if (lockConnAttempt.tryAcquire()) {
-            new Thread(() -> {
+        if (lockConnAttempt.tryAcquire() && connectionThread == null) {
+            connectionThread = new Thread(() -> {
                 Thread.currentThread().setName("asyncConnectionToDevice() " + dDevice + ", caller: " + caller);
 
                 String callerAndThread = caller + ", thread: " + Thread.currentThread().getId();
@@ -206,14 +208,16 @@ class PeerDevice {
                         lockHandshakeAttempt.release();
                     }
                 }
-            }).start();
+                connectionThread = null;
+            });
+            connectionThread.start();
         } else {
             Log.w(TAG, "asyncConnectionToDevice() skipped GATT connection attempt: already running for device: " + dDevice + ", caller: " + caller);
         }
     }
 
     // Disconnect device and remove it from index
-    private void disconnectFromDevice(String cause) {
+    void disconnectFromDevice(String cause) {
         Log.w(TAG, "disconnectFromDevice() called for device: " + dDevice + " caused by: " + cause);
 
         try {
@@ -221,24 +225,23 @@ class PeerDevice {
             disconnectGatt();
             Thread.sleep(waitAfterDeviceDisconnect);
             DeviceManager.removeDeviceFromIndex(this);
-            lockConnAttempt.release();
         } catch (Exception e) {
             Log.d(TAG, "disconnectFromDevice() failed: " + e.getMessage() + " for device: " + dDevice);
         }
-    }
-
-    void asyncDisconnectFromDevice(String cause) {
-        Log.w(TAG, "asyncDisconnectFromDevice() called for device: " + dDevice + " caused by: " + cause);
-
-        new Thread(() -> disconnectFromDevice(cause)).start();
+        lockConnAttempt.release();
     }
 
 
     // GATT related
-    private void setGatt() {
+    private void setGatt() throws Exception {
         Log.d(TAG, "setGatt() called for device: " + dDevice);
 
         if (dGatt == null) {
+            Context context = BleManager.getContext();
+            if (context == null) {
+                throw new Exception("cant retrieve context");
+            }
+
             dGatt = dDevice.connectGatt(BleManager.getContext(), false, BleManager.getGattCallback());
         }
     }
@@ -247,20 +250,48 @@ class PeerDevice {
         Log.i(TAG, "connectGatt() called for device: " + dDevice + ", caller: " + caller);
 
         try {
-            setGatt();
             for (int attempt = 0; attempt < gattConnectMaxAttempts; attempt++) {
-                Log.d(TAG, "connectGatt() attempt: " + (attempt + 1) + "/" + gattConnectMaxAttempts + ", device:" + dDevice + ", client state: " + Log.connectionStateToString(getGattClientState()) + ", server state: "  + Log.connectionStateToString(getGattServerState()));
+                Log.d(TAG, "connectGatt() attempt: " + (attempt + 1) + "/" + gattConnectMaxAttempts + ", device: " + dDevice + ", client state: " + Log.connectionStateToString(getGattClientState()) + ", server state: "  + Log.connectionStateToString(getGattServerState()));
 
+                Log.i(TAG, "424242 CONNECT1 THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
+                if (Thread.interrupted()) {
+                    Log.e(TAG, "424242 INTERRUPTION CONNECTGATT");
+                    throw new InterruptedException("connectGatt() thread interrupted");
+                } else if (Thread.currentThread().isInterrupted()) {
+                    Log.e(TAG, "424242 CURRENT INTERRUPTION CONNECTGATT");
+                    throw new InterruptedException("connectGatt() thread interrupted");
+                }
+
+                setGatt();
+                Thread.sleep(waitAfterGattSetup);
                 dGatt.connect();
 
                 for (int gattWaitConnectAttempt = 0; gattWaitConnectAttempt < gattWaitConnectMaxAttempts; gattWaitConnectAttempt++) {
                     Log.d(TAG, "connectGatt() wait " + gattWaitConnectAttemptTimeout + "ms (disconnected state) " + (gattWaitConnectAttempt + 1) + "/" + gattWaitConnectMaxAttempts + " for device: " + dDevice);
                     Thread.sleep(gattWaitConnectAttemptTimeout);
 
+                    Log.i(TAG, "424242 CONNECT2 THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
+                    if (Thread.interrupted()) {
+                        Log.e(TAG, "424242 INTERRUPTION CONNECTGATT");
+                        throw new InterruptedException("connectGatt() thread interrupted");
+                    } else if (Thread.currentThread().isInterrupted()) {
+                        Log.e(TAG, "424242 CURRENT INTERRUPTION CONNECTGATT");
+                        throw new InterruptedException("connectGatt() thread interrupted");
+                    }
+
                     if (getGattClientState() == STATE_CONNECTING || getGattServerState() == STATE_CONNECTING) {
-                        for (int gattConnectingAttempt = 0; gattConnectingAttempt < gattConnectingMaxAttempts; gattConnectingAttempt++) {
+                        for (int gattConnectingAttempt = 0; gattConnectingAttempt < gattConnectingMaxAttempts && !Thread.currentThread().isInterrupted(); gattConnectingAttempt++) {
                             Log.d(TAG, "connectGatt() wait " + gattConnectingAttemptTimeout + "ms (connecting state) " + (gattConnectingAttempt + 1) + "/" + gattConnectingMaxAttempts + " for device: " + dDevice);
                             Thread.sleep(gattConnectingAttemptTimeout);
+
+                            Log.i(TAG, "424242 CONNECT3 THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
+                            if (Thread.interrupted()) {
+                                Log.e(TAG, "424242 INTERRUPTION CONNECTGATT");
+                                throw new InterruptedException("connectGatt() thread interrupted");
+                            } else if (Thread.currentThread().isInterrupted()) {
+                                Log.e(TAG, "424242 CURRENT INTERRUPTION CONNECTGATT");
+                                throw new InterruptedException("connectGatt() thread interrupted");
+                            }
 
                             if (isGattConnected()) {
                                 break;
@@ -275,8 +306,6 @@ class PeerDevice {
                 }
                 disconnectGatt();
                 Thread.sleep(waitAfterGattDisconnect);
-                setGatt();
-                Thread.sleep(waitAfterGattSetup);
             }
 
             Log.e(TAG, "connectGatt() failed for device: " + dDevice);
@@ -303,30 +332,36 @@ class PeerDevice {
         dMtu = mtu;
     }
 
-    private int getGattClientState() {
-        Log.v(TAG, "getGattClientState() called for device: " + dDevice);
-
+    private int getGattState(boolean client) {
         final Context context = BleManager.getContext();
-        final BluetoothManager manager = (BluetoothManager)context.getSystemService(Context.BLUETOOTH_SERVICE);
-        if (manager == null) {
-            Log.e(TAG, "Can't get BLE Manager");
+        if (context == null) {
+            Log.e(TAG, "Can't get context");
             return STATE_DISCONNECTED;
         }
 
-        return manager.getConnectionState(dDevice, GATT);
+        final BluetoothManager manager = (BluetoothManager)context.getSystemService(Context.BLUETOOTH_SERVICE);
+        if (manager == null) {
+            Log.e(TAG, "Can't get Bluetooth Manager");
+            return STATE_DISCONNECTED;
+        }
+
+        if (client) {
+            return manager.getConnectionState(dDevice, GATT);
+        }
+
+        return manager.getConnectionState(dDevice, GATT_SERVER);
+    }
+
+    private int getGattClientState() {
+        Log.v(TAG, "getGattClientState() called for device: " + dDevice);
+
+        return getGattState(true);
     }
 
     private int getGattServerState() {
         Log.v(TAG, "getGattServerState() called for device: " + dDevice);
 
-        final Context context = BleManager.getContext();
-        final BluetoothManager manager = (BluetoothManager)context.getSystemService(Context.BLUETOOTH_SERVICE);
-        if (manager == null) {
-            Log.e(TAG, "Can't get BLE Manager");
-            return STATE_DISCONNECTED;
-        }
-
-        return manager.getConnectionState(dDevice, GATT_SERVER);
+        return getGattState(false);
     }
 
     boolean isGattConnected() {
@@ -371,6 +406,16 @@ class PeerDevice {
         try {
             // Wait for services discovery started
             for (int servDiscoveryAttempt = 0; servDiscoveryAttempt < servDiscoveryMaxAttempts && !dGatt.discoverServices(); servDiscoveryAttempt++) {
+
+                Log.i(TAG, "424242 CHECKSERV THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
+                if (Thread.interrupted()) {
+                    Log.e(TAG, "424242 SERV COMP");
+                    throw new InterruptedException("checkLibp2pServiceCompliance() thread interrupted");
+                } else if (Thread.currentThread().isInterrupted()) {
+                    Log.e(TAG, "424242 CURRENT SERV COMP");
+                    throw new InterruptedException("checkLibp2pServiceCompliance() thread interrupted");
+                }
+
                 if (isGattConnected()) {
                     Log.d(TAG, "checkLibp2pServiceCompliance() device " + dDevice + " GATT is connected, waiting for service discovery: " + servDiscoveryAttempt + "/" + servDiscoveryMaxAttempts);
                     Thread.sleep(servDiscoveryAttemptTimeout);
@@ -426,6 +471,12 @@ class PeerDevice {
             List<Future<BluetoothGattCharacteristic>> answers = es.invokeAll(todo);
             for (Future<BluetoothGattCharacteristic> future : answers) {
                 BluetoothGattCharacteristic characteristic = future.get(charDiscoveryTimeout, TimeUnit.MILLISECONDS);
+
+                Log.i(TAG, "424242 CHECKCHAR THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
+                if (Thread.interrupted()) {
+                    Log.e(TAG, "424242 CHAR COMP");
+                    throw new InterruptedException("checkLibp2pCharacteristicsCompliance() thread interrupted");
+                }
 
                 if (characteristic != null && characteristic.getUuid().equals(BleManager.MA_UUID)) {
                     Log.d(TAG, "checkLibp2pCharacteristicsCompliance() MultiAddr characteristic retrieved: " + characteristic + " on device: " + dDevice);
@@ -513,30 +564,48 @@ class PeerDevice {
                 } while (offset < length);
 
                 while (!toSend.isEmpty()) {
+                    Log.i(TAG, "424242 WRITE1 THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
+                    if (Thread.interrupted()) {
+                        Log.e(TAG, "424242 WRITE");
+                        throw new InterruptedException("writeOnCharacteristic() thread interrupted");
+                    } else if (Thread.currentThread().isInterrupted()) {
+                        Log.e(TAG, "424242 CURRENT WRITE");
+                        throw new InterruptedException("writeOnCharacteristic() thread interrupted");
+                    }
+
                     characteristic.setValue(toSend.get(0));
                     for (int attempt = 0; dGatt != null && !dGatt.writeCharacteristic(characteristic); attempt++) {
+                        Log.i(TAG, "424242 WRITE2 THREAD STATE " + Thread.interrupted() + " " + Thread.currentThread().isInterrupted());
+                        if (Thread.interrupted()) {
+                            Log.e(TAG, "424242 WRITE");
+                            throw new InterruptedException("writeOnCharacteristic() thread interrupted");
+                        } else if (Thread.currentThread().isInterrupted()) {
+                            Log.e(TAG, "424242 CURRENT WRITE");
+                            throw new InterruptedException("writeOnCharacteristic() thread interrupted");
+                        }
+
                         if (attempt == initWriteMaxAttempts) {
-                            Log.e(TAG, "writeOnCharacteristic() wait for write init timeouted for device:" + dDevice);
+                            Log.e(TAG, "writeOnCharacteristic() wait for write init timeouted for device: " + dDevice);
                             return false;
                         }
 
-                        Log.v(TAG, "writeOnCharacteristic() wait for write init: " + (attempt + 1) + "/" + initWriteMaxAttempts + ", device:" + dDevice);
+                        Log.v(TAG, "writeOnCharacteristic() wait for write init: " + (attempt + 1) + "/" + initWriteMaxAttempts + ", device: " + dDevice);
                         Thread.sleep(initWriteAttemptTimeout);
                     }
 
                     if (dGatt == null) {
-                        Log.e(TAG, "writeOnCharacteristic() device disconnected during write operation:" + dDevice);
+                        Log.e(TAG, "writeOnCharacteristic() device disconnected during write operation: " + dDevice);
                         return false;
                     }
 
                     if (!waitWriteDone.tryAcquire(writeDoneTimeout, TimeUnit.MILLISECONDS)) {
-                        Log.e(TAG, "writeOnCharacteristic() timeouted for device:" + dDevice);
+                        Log.e(TAG, "writeOnCharacteristic() timeouted for device: " + dDevice);
                         return false;
                     }
 
                     toSend.remove(0);
                 }
-                Log.d(TAG, "writeOnCharacteristic() succeeded for device:" + dDevice + " with payload: " + new String(payload));
+                Log.d(TAG, "writeOnCharacteristic() succeeded for device: " + dDevice + " with payload: " + new String(payload));
                 return true;
             }
         } catch (Exception e) {

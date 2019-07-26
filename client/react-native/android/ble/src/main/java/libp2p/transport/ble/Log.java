@@ -7,6 +7,11 @@ import static android.bluetooth.BluetoothProfile.STATE_CONNECTING;
 import static android.bluetooth.BluetoothProfile.STATE_CONNECTED;
 import static android.bluetooth.BluetoothProfile.STATE_DISCONNECTING;
 
+import static android.bluetooth.BluetoothAdapter.STATE_OFF;
+import static android.bluetooth.BluetoothAdapter.STATE_TURNING_ON;
+import static android.bluetooth.BluetoothAdapter.STATE_ON;
+import static android.bluetooth.BluetoothAdapter.STATE_TURNING_OFF;
+
 final class Log {
 
     static void v(String tag, String log) {
@@ -35,6 +40,21 @@ final class Log {
                 return "connected";
             case STATE_DISCONNECTING:
                 return "disconnecting";
+            default:
+                return "unknown";
+        }
+    }
+
+    static String bluetoothAdapterStateToString(int state) {
+        switch (state) {
+            case STATE_OFF:
+                return "off";
+            case STATE_TURNING_ON:
+                return "turning on";
+            case STATE_ON:
+                return "on";
+            case STATE_TURNING_OFF:
+                return "turning off";
             default:
                 return "unknown";
         }

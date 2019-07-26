@@ -11,20 +11,25 @@ import (
 
 // HandlePeerFound is called by the native driver when a new peer is found.
 func HandlePeerFound(rID string, rAddr string) bool {
+	logger().Debug("HANDLEPEER CALLED 424242")
+	defer logger().Debug("HANDLEPEER ENDED 424242")
 	rPID, err := peer.IDB58Decode(rID)
 	if err != nil {
+		logger().Error("HANDLEPEER ERR 424242")
 		logger().Error("discovery handle peer failed: wrong remote peerID")
 		return false
 	}
 
 	rMa, err := ma.NewMultiaddr(fmt.Sprintf("/ble/%s", rAddr))
 	if err != nil {
+		logger().Error("HANDLEPEER ERR 424242")
 		logger().Error("discovery handle peer failed: wrong remote multiaddr")
 		return false
 	}
 
 	// Checks if a listener is currently running.
 	if gListener == nil || gListener.ctx.Err() != nil {
+		logger().Error("HANDLEPEER ERR 424242")
 		logger().Error("discovery handle peer failed: listener not running")
 		return false
 	}
@@ -55,6 +60,7 @@ func HandlePeerFound(rID string, rAddr string) bool {
 	}:
 		return true
 	case <-gListener.ctx.Done():
+		logger().Error("HANDLEPEER ERR LISTEN CLOSED 424242")
 		gListener.inUse.Done()
 		return false
 	}

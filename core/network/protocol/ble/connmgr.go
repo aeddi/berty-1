@@ -19,6 +19,8 @@ var connMap sync.Map
 
 // newConn returns an inbound or outbound tpt.CapableConn upgraded from a Conn.
 func newConn(ctx context.Context, t *Transport, rMa ma.Multiaddr, rPID peer.ID, inbound bool) (tpt.CapableConn, error) {
+	logger().Debug("NEWCONN CALLED 424242")
+	defer logger().Debug("NEWCONN ENDED 424242")
 	// Creates a BLE manet.Conn
 	pr, pw := io.Pipe()
 	connCtx, cancel := context.WithCancel(gListener.ctx)
@@ -40,14 +42,24 @@ func newConn(ctx context.Context, t *Transport, rMa ma.Multiaddr, rPID peer.ID, 
 
 	// Returns an upgraded CapableConn (muxed, addr filtered, secured, etc...)
 	if inbound {
-		return t.upgrader.UpgradeInbound(ctx, t, maconn)
+		conn, err := t.upgrader.UpgradeInbound(ctx, t, maconn)
+		if err != nil {
+			logger().Error("NEWCONN ERR 424242", zap.Error(err))
+		}
+		return conn, err
 	} else {
-		return t.upgrader.UpgradeOutbound(ctx, t, maconn, rPID)
+		conn, err := t.upgrader.UpgradeOutbound(ctx, t, maconn, rPID)
+		if err != nil {
+			logger().Error("NEWCONN ERR 424242", zap.Error(err))
+		}
+		return conn, err
 	}
 }
 
 // ReceiveFromDevice is called by native driver when peer's device sent data.
 func ReceiveFromDevice(rAddr string, payload []byte) {
+	logger().Debug("RECEIVEFROMDEVICE CALLED 424242", zap.Int("payload size", len(payload)), zap.ByteString("payload", payload))
+	defer logger().Debug("RECEIVEFROMDEVICE ENDED 424242")
 	// TODO: implement a cleaner way to do that
 	// Checks during 100 ms if the conn is available, because remote device can
 	// be ready to write while local device is still creating the new conn.
@@ -55,11 +67,14 @@ func ReceiveFromDevice(rAddr string, payload []byte) {
 		c, ok := connMap.Load(rAddr)
 		if ok {
 			c.(*Conn).readIn.Write(payload)
+			logger().Debug("RECEIVEFROMDEVICE WRITE SUCCESS 424242", zap.Int("payload", len(payload)), zap.ByteString("payload", payload))
 			return
 		}
 		time.Sleep(1 * time.Millisecond)
+		logger().Debug("RECEIVEFROMDEVICE WAITING 424242")
 	}
 
+	logger().Error("RECEIVEFROMDEVICE ERR 424242")
 	logger().Error(
 		"connmgr failed to read from conn: unknown conn",
 		zap.String("remote address", rAddr),

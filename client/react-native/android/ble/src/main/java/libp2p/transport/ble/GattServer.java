@@ -115,8 +115,8 @@ class GattServer extends BluetoothGattServerCallback {
             }
         } else if (charID.equals(BleManager.PEER_ID_UUID) || charID.equals(BleManager.MA_UUID)) {
             if (peerDevice.isIdentified()) {
-                Log.e(TAG, "onCharacteristicWriteRequest() PeerID/MultiAddr failed: identified device tried to write on PeerID characteristic");
-                peerDevice.asyncDisconnectFromDevice("onCharacteristicWriteRequest() PeerID");
+                Log.e(TAG, "onCharacteristicWriteRequest() PeerID/MultiAddr failed: identified device tried to write on PeerID or MultiAddr characteristic");
+                peerDevice.disconnectFromDevice("onCharacteristicWriteRequest() PeerID");
                 mBluetoothGattServer.sendResponse(device, requestId, GATT_FAILURE, offset, null);
                 return;
             }
@@ -185,7 +185,7 @@ class GattServer extends BluetoothGattServerCallback {
      */
     @Override
     public void onServiceAdded(int status, BluetoothGattService service) {
-        Log.d(TAG, "sendServiceAdded() called with status: " + status + ", service: " + service);
+        Log.d(TAG, "onServiceAdded() called with status: " + status + ", service: " + service);
 
         super.onServiceAdded(status, service);
     }

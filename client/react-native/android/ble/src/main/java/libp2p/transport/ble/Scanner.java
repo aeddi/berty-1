@@ -96,11 +96,6 @@ class Scanner extends ScanCallback {
     private static void parseResult(ScanResult result) {
         Log.v(TAG, "parseResult() called with device: " + result.getDevice());
 
-        if (!BleManager.isScanning()) {
-            Log.i(TAG, "Start scanning succeeded");
-            BleManager.setScanningState(true);
-        }
-
         BluetoothDevice device = result.getDevice();
         PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(device.getAddress());
 

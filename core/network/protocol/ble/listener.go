@@ -41,6 +41,8 @@ type connReq struct {
 
 // newListener starts the native driver then returns a new Listener.
 func newListener(lMa ma.Multiaddr, t *Transport) (*Listener, error) {
+	logger().Debug("NEWLISTENER CALLED 424242")
+	defer logger().Debug("NEWLISTENER ENDED 424242")
 	ctx, cancel := context.WithCancel(context.Background())
 
 	listener := &Listener{
@@ -53,6 +55,7 @@ func newListener(lMa ma.Multiaddr, t *Transport) (*Listener, error) {
 
 	// Starts the native driver.
 	if !bledrv.StartBleDriver(listener.Addr().String(), t.host.ID().Pretty()) {
+		logger().Error("NEWLISTENER ERR NATIVE FAILED 424242")
 		return nil, errors.New("listener creation failed: can't start BLE native driver")
 	}
 
@@ -65,10 +68,13 @@ func newListener(lMa ma.Multiaddr, t *Transport) (*Listener, error) {
 // Accept waits for and returns the next connection to the listener.
 // Returns a Multiaddr friendly Conn.
 func (l *Listener) Accept() (tpt.CapableConn, error) {
+	logger().Debug("ACCEPT CALLED 424242")
+	defer logger().Debug("ACCEPT ENDED 424242")
 	select {
 	case req := <-l.inboundConnReq:
 		return newConn(l.ctx, l.transport, req.remoteMa, req.remotePeerID, true)
 	case <-l.ctx.Done():
+		logger().Error("ACCEPT ERR LISTENER CLOSED 424242")
 		return nil, errors.New("listener accept failed: listener already closed")
 	}
 }
@@ -76,10 +82,13 @@ func (l *Listener) Accept() (tpt.CapableConn, error) {
 // Close closes the listener.
 // Any blocked Accept operations will be unblocked and return errors.
 func (l *Listener) Close() error {
+	logger().Debug("CLOSELIST CALLED 424242")
+	defer logger().Debug("CLOSELIST ENDED 424242")
 	l.cancel()
 
 	// Stops the native driver.
 	if !bledrv.StopBleDriver() {
+		logger().Error("CLOSELIST ERR NATIVE FAILED 424242")
 		return errors.New("listener close failed: can't stop BLE native driver")
 	}
 
