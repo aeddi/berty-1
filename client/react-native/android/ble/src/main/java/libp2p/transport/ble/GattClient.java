@@ -11,16 +11,7 @@ import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothProfile;
 
-import static android.bluetooth.BluetoothGatt.GATT_CONNECTION_CONGESTED;
-import static android.bluetooth.BluetoothGatt.GATT_FAILURE;
-import static android.bluetooth.BluetoothGatt.GATT_INSUFFICIENT_AUTHENTICATION;
-import static android.bluetooth.BluetoothGatt.GATT_INSUFFICIENT_ENCRYPTION;
-import static android.bluetooth.BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH;
-import static android.bluetooth.BluetoothGatt.GATT_INVALID_OFFSET;
-import static android.bluetooth.BluetoothGatt.GATT_READ_NOT_PERMITTED;
-import static android.bluetooth.BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED;
 import static android.bluetooth.BluetoothGatt.GATT_SUCCESS;
-import static android.bluetooth.BluetoothGatt.GATT_WRITE_NOT_PERMITTED;
 
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
 class GattClient extends BluetoothGattCallback {
@@ -86,6 +77,31 @@ class GattClient extends BluetoothGattCallback {
     }
 
     /**
+     * Callback reporting the result of a characteristic read operation.
+     *
+     * @param gatt           GATT client invoked {@link BluetoothGatt#readCharacteristic}
+     * @param characteristic Characteristic that was read from the associated
+     *                       remote device.
+     * @param status         {@link BluetoothGatt#GATT_SUCCESS} if the read operation
+     */
+    @Override
+    public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
+        Log.d(TAG, "onCharacteristicRead() called with gatt: " + gatt + ", characteristic: " + characteristic + ", status: " + status);
+
+        PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(gatt.getDevice().getAddress());
+
+        if (peerDevice != null) {
+            peerDevice.readFailed = (status != GATT_SUCCESS);
+            if (peerDevice.readFailed) {
+                Log.e(TAG, "GATT client reading failed: " + Log.gattStatusToString(status));
+            }
+            peerDevice.waitReadDone.release();
+        }
+
+        super.onCharacteristicRead(gatt, characteristic, status);
+    }
+
+    /**
      * Callback indicating the result of a characteristic write operation.
      *
      * <p>If this callback is invoked while a reliable write transaction is
@@ -107,45 +123,11 @@ class GattClient extends BluetoothGattCallback {
         PeerDevice peerDevice = DeviceManager.getDeviceFromAddr(gatt.getDevice().getAddress());
 
         if (peerDevice != null) {
-            if (status == GATT_SUCCESS) {
-                peerDevice.waitWriteDone.release();
-            } else {
-                String errorString;
-
-                switch (status) {
-                    case GATT_READ_NOT_PERMITTED:
-                        errorString = "GATT_READ_NOT_PERMITTED";
-                        break;
-                    case GATT_WRITE_NOT_PERMITTED:
-                        errorString = "GATT_WRITE_NOT_PERMITTED";
-                        break;
-                    case GATT_INSUFFICIENT_AUTHENTICATION:
-                        errorString = "GATT_INSUFFICIENT_AUTHENTICATION";
-                        break;
-                    case GATT_REQUEST_NOT_SUPPORTED:
-                        errorString = "GATT_REQUEST_NOT_SUPPORTED";
-                        break;
-                    case GATT_INSUFFICIENT_ENCRYPTION:
-                        errorString = "GATT_INSUFFICIENT_ENCRYPTION";
-                        break;
-                    case GATT_INVALID_OFFSET:
-                        errorString = "GATT_INVALID_OFFSET";
-                        break;
-                    case GATT_INVALID_ATTRIBUTE_LENGTH:
-                        errorString = "GATT_INVALID_ATTRIBUTE_LENGTH";
-                        break;
-                    case GATT_CONNECTION_CONGESTED:
-                        errorString = "GATT_CONNECTION_CONGESTED";
-                        break;
-                    case GATT_FAILURE:
-                        errorString = "GATT_FAILURE";
-                        break;
-                    default:
-                        errorString = "UNKNOWN_FAILURE";
-                        break;
-                }
-                Log.e(TAG, "GATT client writing failed: " + errorString);
+            peerDevice.writeFailed = (status != GATT_SUCCESS);
+            if (peerDevice.writeFailed) {
+                Log.e(TAG, "GATT client writing failed: " + Log.gattStatusToString(status));
             }
+            peerDevice.waitWriteDone.release();
         }
 
         super.onCharacteristicWrite(gatt, characteristic, status);
@@ -173,21 +155,6 @@ class GattClient extends BluetoothGattCallback {
         }
 
         super.onMtuChanged(gatt, mtu, status);
-    }
-
-    /**
-     * Callback reporting the result of a characteristic read operation.
-     *
-     * @param gatt           GATT client invoked {@link BluetoothGatt#readCharacteristic}
-     * @param characteristic Characteristic that was read from the associated
-     *                       remote device.
-     * @param status         {@link BluetoothGatt#GATT_SUCCESS} if the read operation
-     */
-    @Override
-    public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-        Log.v(TAG, "onCharacteristicRead() called with gatt: " + gatt + ", characteristic: " + characteristic + ", status: " + status);
-
-        super.onCharacteristicRead(gatt, characteristic, status);
     }
 
     /**

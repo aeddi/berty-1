@@ -5,7 +5,6 @@ import android.annotation.TargetApi;
 
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Map;
 
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
 final class DeviceManager {
@@ -41,11 +40,9 @@ final class DeviceManager {
 
         synchronized (peerDevices) {
             for (PeerDevice peerDevice : peerDevices.values()) {
-                Log.e(TAG, "424242 BEFORE INTERRUPT " + peerDevice.getAddr() + " " + peerDevices.containsKey(peerDevice.getAddr()));
                 peerDevice.interruptConnectionThread();
-                Log.e(TAG, "424242 BEFORE REMOVE " + peerDevice.getAddr() + " " + peerDevices.containsKey(peerDevice.getAddr()));
+                peerDevice.interruptHandshakeThread();
                 peerDevices.remove(peerDevice.getAddr());
-                Log.e(TAG, "424242 AFTER REMOVE " + peerDevice.getAddr() + " " + peerDevices.containsKey(peerDevice.getAddr()));
             }
         }
     }
@@ -109,7 +106,7 @@ final class DeviceManager {
         }
 
         try {
-            return peerDevice.writeOnCharacteristic(payload, peerDevice.writerCharacteristic);
+            return peerDevice.writeToRemoteWriterCharacteristic(payload);
         } catch(InterruptedException e) {
             Log.e(TAG, "writeToDevice() failed: " + e.getMessage());
             return false;
@@ -123,6 +120,7 @@ final class DeviceManager {
 
         if (peerDevice != null) {
             peerDevice.interruptConnectionThread();
+            peerDevice.interruptHandshakeThread();
             peerDevice.disconnectFromDevice("libp2p request");
         } else {
             Log.e(TAG, "disconnectFromDevice() failed: unknown device");
