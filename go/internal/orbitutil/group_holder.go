@@ -22,6 +22,7 @@ import (
 
 const groupIDKey = "group_id"
 const memberStoreType = "member_store"
+const secretStoreType = "secret_store"
 
 func (s *GroupHolder) getGroup(groupID string) (*GroupContext, error) {
 	g, ok := s.groups[groupID]
@@ -93,20 +94,28 @@ func (s *GroupHolder) AddGroup(ctx context.Context, o orbitdb.OrbitDB, g *group.
 	if err != nil {
 		return nil, errcode.TODO.Wrap(err)
 	}
+	gc.SecretStore, err = s.newSecretStore(ctx, o, gc, *options)
+	if err != nil {
+		return nil, errcode.TODO.Wrap(err)
+	}
 
 	return gc, nil
 }
 
-// newMemberStore Creates or opens a MemberStore
-func (s *GroupHolder) newMemberStore(ctx context.Context, o orbitdb.OrbitDB, gc *GroupContext, options orbitdb.CreateDBOptions) (MemberStore, error) {
+func newStore(ctx context.Context, o orbitdb.OrbitDB, gc *GroupContext, options orbitdb.CreateDBOptions, storeType string) (iface.Store, error) {
 	groupID, err := gc.Group.GroupIDAsString()
 	if err != nil {
 		return nil, errcode.TODO.Wrap(err)
 	}
 
-	options.StoreType = stringPtr(memberStoreType)
+	options.StoreType = stringPtr(storeType)
 
-	store, err := o.Open(ctx, groupID, &options)
+	return o.Open(ctx, groupID, &options)
+}
+
+// newMemberStore Creates or opens a MemberStore
+func (s *GroupHolder) newMemberStore(ctx context.Context, o orbitdb.OrbitDB, gc *GroupContext, options orbitdb.CreateDBOptions) (MemberStore, error) {
+	store, err := newStore(ctx, o, gc, options, memberStoreType)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to open database")
 	}
@@ -119,6 +128,23 @@ func (s *GroupHolder) newMemberStore(ctx context.Context, o orbitdb.OrbitDB, gc 
 	memberStore.groupContext = gc
 
 	return memberStore, nil
+}
+
+// newSecretStore Creates or opens a SecretStore
+func (s *GroupHolder) newSecretStore(ctx context.Context, o orbitdb.OrbitDB, gc *GroupContext, options orbitdb.CreateDBOptions) (SecretStore, error) {
+	store, err := newStore(ctx, o, gc, options, secretStoreType)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to open database")
+	}
+
+	secretStore, ok := store.(*secretStore)
+	if !ok {
+		return nil, errors.New("unable to cast store to secret store")
+	}
+
+	secretStore.groupContext = gc
+
+	return secretStore, nil
 }
 
 func (s *GroupHolder) memberStoreConstructor(ctx context.Context, ipfs coreapi.CoreAPI, identity *identityprovider.Identity, addr address.Address, options *iface.NewStoreOptions) (iface.Store, error) {
@@ -137,10 +163,26 @@ func (s *GroupHolder) memberStoreConstructor(ctx context.Context, ipfs coreapi.C
 	return store, nil
 }
 
+func (s *GroupHolder) secretStoreConstructor(ctx context.Context, ipfs coreapi.CoreAPI, identity *identityprovider.Identity, addr address.Address, options *iface.NewStoreOptions) (iface.Store, error) {
+	g, err := s.getGroupFromOptions(options)
+	if err != nil {
+		return nil, errcode.TODO.Wrap(err)
+	}
+	options.Index = NewSecretStoreIndex(g)
+
+	store := &secretStore{}
+	err = store.InitBaseStore(ctx, ipfs, identity, addr, options)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to initialize base store")
+	}
+
+	return store, nil
+}
+
 type GroupContext struct {
 	Group       *group.Group
 	MemberStore MemberStore
-	//secretStore SecretStore
+	SecretStore SecretStore
 }
 
 type GroupHolder struct {
@@ -159,6 +201,7 @@ func NewGroupHolder() (*GroupHolder, error) {
 
 	// TODO: we can only have a single instance of GroupHolder, otherwise secrets won't be properly retrieved
 	stores.RegisterStore(memberStoreType, secretHolder.memberStoreConstructor)
+	stores.RegisterStore(secretStoreType, secretHolder.secretStoreConstructor)
 	if err := identityprovider.AddIdentityProvider(NewBertySignedIdentityProviderFactory(secretHolder.keyStore)); err != nil {
 		return nil, errcode.TODO.Wrap(err)
 	}
