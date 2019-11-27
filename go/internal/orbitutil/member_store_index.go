@@ -39,9 +39,9 @@ func (i *indexEntry) findParent(index *memberStoreIndex) *indexEntry {
 }
 
 type memberStoreIndex struct {
-	group   *group.Group
-	entries map[string]*indexEntry
-	members []*group.MemberDevice
+	groupContext *GroupContext
+	entries      map[string]*indexEntry
+	members      []*group.MemberDevice
 }
 
 func (m *memberStoreIndex) Get(key string) interface{} {
@@ -49,7 +49,7 @@ func (m *memberStoreIndex) Get(key string) interface{} {
 }
 
 func (m *memberStoreIndex) checkMemberLogEntryPayloadFirst(entry *indexEntry) error {
-	if !entry.parentPubKey.Equals(m.group.PubKey) {
+	if !entry.parentPubKey.Equals(m.groupContext.Group.PubKey) {
 		return errcode.ErrGroupMemberLogWrongInviter
 	}
 
@@ -99,7 +99,7 @@ func (m *memberStoreIndex) UpdateIndex(log ipfslog.Log, entries []ipfslog.Entry)
 				continue
 			}
 
-			if idxE.err = group.OpenStorePayload(payload, entryBytes, m.group); idxE.err != nil {
+			if idxE.err = group.OpenStorePayload(payload, entryBytes, m.groupContext.Group); idxE.err != nil {
 				continue
 			}
 
@@ -171,11 +171,11 @@ func hasAllParentsValid(entry *indexEntry, index *memberStoreIndex) bool {
 }
 
 // NewMemberStoreIndex returns a new index to manage the list of the group members
-func NewMemberStoreIndex(g *group.Group) iface.IndexConstructor {
+func NewMemberStoreIndex(gc *GroupContext) iface.IndexConstructor {
 	return func(publicKey []byte) iface.StoreIndex {
 		return &memberStoreIndex{
-			group:   g,
-			entries: map[string]*indexEntry{},
+			groupContext: gc,
+			entries:      map[string]*indexEntry{},
 		}
 	}
 }

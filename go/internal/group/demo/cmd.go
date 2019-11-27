@@ -104,7 +104,10 @@ func mainLoop(invitation *group.Invitation, create bool) {
 		panic(err)
 	}
 
-	s, err := secretHolder.NewMemberStore(ctx, odb, g, &orbitdb.CreateDBOptions{
+	createDB := true
+
+	gc, err := secretHolder.AddGroup(ctx, odb, g, &orbitdb.CreateDBOptions{
+		Create:    &createDB,
 		Directory: &p,
 	})
 	if err != nil {
@@ -144,16 +147,16 @@ func mainLoop(invitation *group.Invitation, create bool) {
 		once := sync.Once{}
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		go s.Subscribe(ctx, func(evt events.Event) {
+		go gc.MemberStore.Subscribe(ctx, func(evt events.Event) {
 			switch evt.(type) {
 			case *stores.EventReplicated, *stores.EventLoad, *stores.EventWrite, *stores.EventReady:
 				println("Replicated or ready")
-				members, err := s.ListMembers()
+				members, err := gc.MemberStore.ListMembers()
 				if err != nil {
 					panic(err)
 				}
 
-				listMembers(s)
+				listMembers(gc.MemberStore)
 
 				for _, m := range members {
 					if m.Device.Equals(inviterDevicePubKey) {
@@ -171,19 +174,19 @@ func mainLoop(invitation *group.Invitation, create bool) {
 		println("redeeming invitation issued by", base64.StdEncoding.EncodeToString(invitation.InviterDevicePubKey))
 	}
 
-	_, err = s.RedeemInvitation(ctx, member, device, invitation)
+	_, err = gc.MemberStore.RedeemInvitation(ctx, member, device, invitation)
 	if err != nil {
 		panic(err)
 	}
 
-	listMembers(s)
+	listMembers(gc.MemberStore)
 	issueNewInvitation(device, g)
 
-	s.Subscribe(ctx, func(e events.Event) {
+	gc.MemberStore.Subscribe(ctx, func(e events.Event) {
 		switch e.(type) {
 		case *stores.EventReplicated:
 			println("New member detected")
-			listMembers(s)
+			listMembers(gc.MemberStore)
 			issueNewInvitation(device, g)
 			break
 		}

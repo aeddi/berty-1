@@ -20,10 +20,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-const memberStoreType = "member_store"
 const groupIDKey = "group_id"
+const memberStoreType = "member_store"
 
-func (s *GroupHolder) getGroup(groupID string) (*group.Group, error) {
+func (s *GroupHolder) getGroup(groupID string) (*GroupContext, error) {
 	g, ok := s.groups[groupID]
 
 	if !ok {
@@ -33,7 +33,7 @@ func (s *GroupHolder) getGroup(groupID string) (*group.Group, error) {
 	return g, nil
 }
 
-func (s *GroupHolder) memberStoreConstructor(ctx context.Context, ipfs coreapi.CoreAPI, identity *identityprovider.Identity, addr address.Address, options *iface.NewStoreOptions) (iface.Store, error) {
+func (s *GroupHolder) getGroupFromOptions(options *iface.NewStoreOptions) (*GroupContext, error) {
 	groupIDs, err := options.AccessController.GetAuthorizedByRole(groupIDKey)
 	if err != nil {
 		return nil, errcode.TODO.Wrap(err)
@@ -43,33 +43,20 @@ func (s *GroupHolder) memberStoreConstructor(ctx context.Context, ipfs coreapi.C
 		return nil, errcode.ErrInvalidInput
 	}
 
-	store := &memberStore{}
-	g, err := s.getGroup(groupIDs[0])
-	if err != nil {
-		return nil, errcode.TODO.Wrap(err)
-	}
-
-	options.Index = NewMemberStoreIndex(g)
-
-	err = store.InitBaseStore(ctx, ipfs, identity, addr, options)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to initialize base store")
-	}
-
-	return store, nil
+	return s.getGroup(groupIDs[0])
 }
 
-// NewMemberStore Creates or opens an MemberStore
-func (s *GroupHolder) NewMemberStore(ctx context.Context, o orbitdb.OrbitDB, g *group.Group, options *orbitdb.CreateDBOptions) (MemberStore, error) {
-	if err := s.setGroup(g); err != nil {
+func (s *GroupHolder) AddGroup(ctx context.Context, o orbitdb.OrbitDB, g *group.Group, options *orbitdb.CreateDBOptions) (*GroupContext, error) {
+	gc := &GroupContext{Group: g}
+
+	if err := s.setGroup(gc); err != nil {
 		return nil, errcode.TODO.Wrap(err)
 	}
 
 	if options == nil {
-		options = &orbitdb.CreateDBOptions{
-			Create: boolPtr(true),
-		}
+		options = &orbitdb.CreateDBOptions{}
 	}
+	options.Create = boolPtr(true)
 
 	groupID, err := g.GroupIDAsString()
 	if err != nil {
@@ -92,8 +79,6 @@ func (s *GroupHolder) NewMemberStore(ctx context.Context, o orbitdb.OrbitDB, g *
 		return nil, errcode.TODO.Wrap(err)
 	}
 
-	options.Create = boolPtr(true)
-	options.StoreType = stringPtr(memberStoreType)
 	options.Keystore = s.keyStore
 	options.Identity, err = identityprovider.CreateIdentity(&identityprovider.CreateIdentityOptions{
 		Type:     IdentityType,
@@ -104,7 +89,24 @@ func (s *GroupHolder) NewMemberStore(ctx context.Context, o orbitdb.OrbitDB, g *
 		return nil, errcode.TODO.Wrap(err)
 	}
 
-	store, err := o.Open(ctx, groupID, options)
+	gc.MemberStore, err = s.newMemberStore(ctx, o, gc, *options)
+	if err != nil {
+		return nil, errcode.TODO.Wrap(err)
+	}
+
+	return gc, nil
+}
+
+// newMemberStore Creates or opens a MemberStore
+func (s *GroupHolder) newMemberStore(ctx context.Context, o orbitdb.OrbitDB, gc *GroupContext, options orbitdb.CreateDBOptions) (MemberStore, error) {
+	groupID, err := gc.Group.GroupIDAsString()
+	if err != nil {
+		return nil, errcode.TODO.Wrap(err)
+	}
+
+	options.StoreType = stringPtr(memberStoreType)
+
+	store, err := o.Open(ctx, groupID, &options)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to open database")
 	}
@@ -114,13 +116,35 @@ func (s *GroupHolder) NewMemberStore(ctx context.Context, o orbitdb.OrbitDB, g *
 		return nil, errors.New("unable to cast store to member store")
 	}
 
-	memberStore.group = g
+	memberStore.groupContext = gc
 
 	return memberStore, nil
 }
 
+func (s *GroupHolder) memberStoreConstructor(ctx context.Context, ipfs coreapi.CoreAPI, identity *identityprovider.Identity, addr address.Address, options *iface.NewStoreOptions) (iface.Store, error) {
+	g, err := s.getGroupFromOptions(options)
+	if err != nil {
+		return nil, errcode.TODO.Wrap(err)
+	}
+	options.Index = NewMemberStoreIndex(g)
+
+	store := &memberStore{}
+	err = store.InitBaseStore(ctx, ipfs, identity, addr, options)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to initialize base store")
+	}
+
+	return store, nil
+}
+
+type GroupContext struct {
+	Group       *group.Group
+	MemberStore MemberStore
+	//secretStore SecretStore
+}
+
 type GroupHolder struct {
-	groups          map[string]*group.Group
+	groups          map[string]*GroupContext
 	groupsSigPubKey map[string]crypto.PubKey
 	keyStore        *BertySignedKeyStore
 }
@@ -128,7 +152,7 @@ type GroupHolder struct {
 // NewGroupHolder creates a new GroupHolder which will hold the groups
 func NewGroupHolder() (*GroupHolder, error) {
 	secretHolder := &GroupHolder{
-		groups:          map[string]*group.Group{},
+		groups:          map[string]*GroupContext{},
 		groupsSigPubKey: map[string]crypto.PubKey{},
 		keyStore:        NewBertySignedKeyStore(),
 	}
@@ -143,15 +167,15 @@ func NewGroupHolder() (*GroupHolder, error) {
 }
 
 // setGroup registers a new group
-func (s *GroupHolder) setGroup(g *group.Group) error {
-	groupID, err := g.GroupIDAsString()
+func (s *GroupHolder) setGroup(g *GroupContext) error {
+	groupID, err := g.Group.GroupIDAsString()
 	if err != nil {
 		return errcode.TODO.Wrap(err)
 	}
 
 	s.groups[groupID] = g
 
-	if err = s.SetGroupSigPubKey(groupID, g.SigningKey.GetPublic()); err != nil {
+	if err = s.SetGroupSigPubKey(groupID, g.Group.SigningKey.GetPublic()); err != nil {
 		return errcode.TODO.Wrap(err)
 	}
 

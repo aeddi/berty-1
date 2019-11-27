@@ -81,13 +81,16 @@ func TestMemberStore(t *testing.T) {
 	}
 
 	g, invitation, err := group.New()
-
-	store, err := groupHolder.NewMemberStore(ctx, odb, g, nil)
-	defer store.Drop()
-
 	if err != nil {
-		t.Fatalf("unable to initialize store, err: %v", err)
+		t.Fatalf("unable to init group")
 	}
+
+	gc, err := groupHolder.AddGroup(ctx, odb, g, nil)
+	if err != nil {
+		t.Fatalf("unable to init groupContext")
+	}
+	store := gc.MemberStore
+	defer store.Drop()
 
 	_, err = store.RedeemInvitation(ctx, memberA.privKey, memberA.devices[0], invitation)
 	if err != nil {
@@ -192,13 +195,13 @@ func TestMemberReplicateStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db1, err := groupHolder.NewMemberStore(ctx, orbitdb1, g, &orbitdb.CreateDBOptions{
+	gc1, err := groupHolder.AddGroup(ctx, orbitdb1, g, &orbitdb.CreateDBOptions{
 		Directory: &dbPath1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	db1 := gc1.MemberStore
 	defer db1.Drop()
 
 	_, err = db1.RedeemInvitation(ctx, memberA.privKey, memberA.devices[0], invitation)
@@ -206,14 +209,14 @@ func TestMemberReplicateStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db2, err := groupHolder.NewMemberStore(ctx, orbitdb2, g, &orbitdb.CreateDBOptions{
+	gc2, err := groupHolder.AddGroup(ctx, orbitdb2, g, &orbitdb.CreateDBOptions{
 		Directory: &dbPath2,
 	})
 
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	db2 := gc2.MemberStore
 	defer db2.Drop()
 
 	{

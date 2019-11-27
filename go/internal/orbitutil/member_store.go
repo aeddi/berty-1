@@ -25,7 +25,7 @@ type MemberStore interface {
 type memberStore struct {
 	basestore.BaseStore
 
-	group *group.Group
+	groupContext *GroupContext
 }
 
 func (m *memberStore) ListMembers() ([]*group.MemberDevice, error) {
@@ -43,7 +43,7 @@ func (m *memberStore) RedeemInvitation(ctx context.Context, memberPrivateKey, de
 		return nil, errcode.TODO.Wrap(err)
 	}
 
-	env, err := group.SealStorePayload(payload, m.group, devicePrivateKey)
+	env, err := group.SealStorePayload(payload, m.groupContext.Group, devicePrivateKey)
 	if err != nil {
 		return nil, errcode.TODO.Wrap(err)
 	}
