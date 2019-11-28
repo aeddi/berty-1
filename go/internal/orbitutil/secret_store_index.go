@@ -5,8 +5,15 @@ import (
 	"berty.tech/go-orbit-db/iface"
 )
 
+type secretEntry struct {
+	secret int
+}
+
 type secretStoreIndex struct {
 	groupContext *GroupContext
+
+	sent     map[string]bool
+	received map[string]*secretEntry
 }
 
 func (m *secretStoreIndex) Get(key string) interface{} {

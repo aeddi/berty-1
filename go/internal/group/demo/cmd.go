@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	mrand "math/rand"
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"berty.tech/go-orbit-db/stores"
 
@@ -138,6 +140,11 @@ func mainLoop(invitation *group.Invitation, create bool) {
 	if err != nil {
 		panic(err)
 	}
+
+	mrand.Seed(time.Now().UnixNano())
+	randomSecret := mrand.Intn(89999) + 10000
+
+	fmt.Println("My secret is:", randomSecret)
 
 	println("Own member key:", base64.StdEncoding.EncodeToString(memberKeyBytes), "device key: ", base64.StdEncoding.EncodeToString(deviceKeyBytes))
 
