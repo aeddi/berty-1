@@ -7,6 +7,7 @@ import (
 	"berty.tech/go/internal/group"
 	"berty.tech/go/pkg/errcode"
 	"github.com/libp2p/go-libp2p-core/crypto"
+	"sync"
 )
 
 type indexEntry struct {
@@ -39,12 +40,16 @@ func (i *indexEntry) findParent(index *memberStoreIndex) *indexEntry {
 }
 
 type memberStoreIndex struct {
-	group   *group.Group
-	entries map[string]*indexEntry
-	members []*group.MemberDevice
+	group     *group.Group
+	entries   map[string]*indexEntry
+	muEntries sync.RWMutex
+	members   []*group.MemberDevice
+	muMembers sync.RWMutex
 }
 
 func (m *memberStoreIndex) Get(key string) interface{} {
+	m.muMembers.RLock()
+	defer m.muMembers.RUnlock()
 	return m.members
 }
 
@@ -57,6 +62,9 @@ func (m *memberStoreIndex) checkMemberLogEntryPayloadFirst(entry *indexEntry) er
 }
 
 func (m *memberStoreIndex) checkMemberLogEntryPayloadInvited(entry *indexEntry) error {
+	m.muEntries.RLock()
+	defer m.muEntries.RUnlock()
+
 	for _, e := range m.entries {
 		if e.memberDevice.Device.Equals(entry.parentPubKey) {
 			return nil
@@ -89,11 +97,18 @@ func (m *memberStoreIndex) UpdateIndex(log ipfslog.Log, entries []ipfslog.Entry)
 		)
 
 		entryHash := e.GetHash().String()
-		if idxE, ok = m.entries[entryHash]; !ok {
+
+		m.muEntries.RLock()
+		idxE, ok = m.entries[entryHash]
+		m.muEntries.RUnlock()
+
+		if !ok {
 			payload := &group.MemberEntryPayload{}
 
 			idxE = &indexEntry{}
+			m.muEntries.Lock()
 			m.entries[entryHash] = idxE
+			m.muEntries.Unlock()
 
 			if entryBytes, idxE.err = unwrapOperation(e); idxE.err != nil {
 				continue
@@ -145,7 +160,9 @@ func (m *memberStoreIndex) validateEntry(entry *indexEntry, isRoot bool) {
 	entry.parent = entry.findParent(m)
 
 	if hasAllParentsValid(entry, m) {
+		m.muMembers.Lock()
 		m.members = append(m.members, entry.memberDevice)
+		m.muMembers.Unlock()
 		entry.fullyValid = true
 	}
 
