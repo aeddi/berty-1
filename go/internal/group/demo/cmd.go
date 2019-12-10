@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"math"
+	"math/big"
 	"os"
 	"path"
 	"sync"
@@ -112,6 +114,24 @@ func mainLoop(invitation *group.Invitation, create bool) {
 	if err != nil {
 		panic(err)
 	}
+
+	counter, err := rand.Int(rand.Reader, big.NewInt(0).SetUint64(math.MaxUint64))
+	if err != nil {
+		panic(err)
+	}
+
+	derivationState := make([]byte, 32)
+	_, err = rand.Read(derivationState)
+	if err != nil {
+		panic(err)
+	}
+
+	secret := group.DeviceSecret{
+		DerivationState: derivationState,
+		Counter:         counter.Uint64(),
+	}
+
+	_ = secret
 
 	memberKeyBytes, err := member.GetPublic().Raw()
 	if err != nil {

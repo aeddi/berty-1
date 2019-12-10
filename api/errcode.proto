@@ -46,6 +46,7 @@ enum ErrCode {
   ErrGroupMemberLogWrongInviter = 1022;
   ErrGroupMemberUnknownGroupID = 1023;
   ErrGroupMemberMissingSecrets = 1024;
+  ErrGroupSecretOtherDestMember = 1030;
 
   //
   // Bridge (starting at 2001)

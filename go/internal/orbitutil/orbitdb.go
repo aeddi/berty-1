@@ -72,7 +72,11 @@ func (s *BertyOrbitDB) InitStoresForGroup(ctx context.Context, g *group.Group, o
 		return nil, errcode.TODO.Wrap(err)
 	}
 
-	if _, err := s.GroupSettingsStore(ctx, gc, options); err != nil {
+	if _, err := s.GroupSettingStore(ctx, gc, options); err != nil {
+		return nil, errcode.TODO.Wrap(err)
+	}
+
+	if _, err := s.GroupSecretStore(ctx, gc, options); err != nil {
 		return nil, errcode.TODO.Wrap(err)
 	}
 
@@ -193,18 +197,18 @@ func (s *BertyOrbitDB) storeForGroup(ctx context.Context, o iface.BaseOrbitDB, g
 	return sStore, nil
 }
 
-func (s *BertyOrbitDB) GroupSettingsStore(ctx context.Context, g orbitutilapi.GroupContext, options *orbitdb.CreateDBOptions) (orbitutilapi.SettingsStore, error) {
-	store, err := s.storeForGroup(ctx, s, g, options, settingstore.StoreType)
+func (s *BertyOrbitDB) GroupSettingStore(ctx context.Context, g orbitutilapi.GroupContext, options *orbitdb.CreateDBOptions) (orbitutilapi.SettingsStore, error) {
+	store, err := s.storeForGroup(ctx, s, g, options, settingtore.StoreType)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to open database")
 	}
 
-	sStore, ok := store.(orbitutilapi.SettingsStore)
+	sStore, ok := store.(orbitutilapi.SettingStore)
 	if !ok {
 		return nil, errors.New("unable to cast store to settings store")
 	}
 
-	g.SetSettingsStore(sStore)
+	g.SetSettingStore(sStore)
 
 	return sStore, nil
 }
