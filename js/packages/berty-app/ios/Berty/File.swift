@@ -7,3 +7,10 @@
 //
 
 import Foundation
+import go_bridge
+
+class Bridge: NSObject {
+  static func setBridgeBackgroundID(bid: String) {
+    LifeCycleDriver.BackgroundID = bid
+  }
+}

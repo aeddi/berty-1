@@ -21,7 +21,7 @@ extension NSDictionary {
 class GoBridge: NSObject {
     static let rnlogger = LoggerDriver("tech.berty", "react")
 
-    // protocolz
+    // protocol
     var bridgeMessenger: BertybridgeMessengerBridge?
     let rootdir: URL
 
