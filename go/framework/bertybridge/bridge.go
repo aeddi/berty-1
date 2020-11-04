@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc"
 
 	"berty.tech/berty/v2/go/framework/bertybridge/internal/bridgepb"
+	"berty.tech/berty/v2/go/internal/cgo"
 	"berty.tech/berty/v2/go/internal/grpcutil"
 	"berty.tech/berty/v2/go/internal/initutil"
 	"berty.tech/berty/v2/go/internal/lifecycle"
@@ -145,6 +146,9 @@ func NewBridge(config *Config) (*Bridge, error) {
 		b.HandleState(config.lc.GetCurrentState())
 		config.lc.RegisterHandler(b)
 	}
+
+	// test openssl
+	b.logger.Info(cgo.Test("All your base are belong to us"))
 
 	// start Bridge
 	b.logger.Debug("starting Bridge")

@@ -28,6 +28,8 @@ xcodegen_ver = $(shell cat ios/XcodeGen.version)
 required_java_ver = 18
 minimum_ios_ver = 12.0
 minimum_android_ver = 21
+library_path = LIBRARY_PATH="$(shell pwd)/ios/Frameworks/openssl/lib"
+cpath = CPATH="$(shell pwd)/ios/Frameworks/openssl/include"
 
 ## if (PWD != Makefile directory) then exit
 
@@ -307,7 +309,8 @@ ios/Frameworks/Bertybridge.framework: $(bridge_src)
 	cd .. && go mod download
 	cd .. && go run golang.org/x/mobile/cmd/gomobile init
 	mkdir -p "ios/Frameworks"
-	cd .. && GO111MODULE=on go run golang.org/x/mobile/cmd/gomobile bind \
+	cd .. && GO111MODULE=on $(library_path) $(cpath) \
+		go run golang.org/x/mobile/cmd/gomobile bind \
 		-o js/$@ \
 		-v $(ext_ldflags) \
 		-target ios \
@@ -354,7 +357,8 @@ android/libs/gobridge.aar: $(bridge_src)
 	cd .. && go mod download
 	cd .. && go run golang.org/x/mobile/cmd/gomobile init
 	mkdir -p "android/libs"
-	cd .. && GO111MODULE=on go run golang.org/x/mobile/cmd/gomobile bind \
+	cd .. && GO111MODULE=on $(library_path) $(cpath) \
+	go run golang.org/x/mobile/cmd/gomobile bind \
 		-o js/$@ \
 		-v $(ext_ldflags) \
 		-target android \

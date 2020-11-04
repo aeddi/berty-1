@@ -2,5 +2,5 @@ Berty.xcodeproj
 Berty.xcworkspace
 Pods
 Info.plist
-Frameworks
+Frameworks/Bertybridge.framework
 main.jsbundle
