@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"sync"
+	"time"
 
 	coreapi "github.com/ipfs/interface-go-ipfs-core"
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -289,14 +290,20 @@ func constructorFactoryGroupMessage(s *BertyOrbitDB) iface.StoreConstructor {
 
 				store.logger.Debug("store_message: received store event", zap.Any("raw event", e))
 
+				start := time.Now()
 				messageEvent, err := store.openMessage(ctx, entry, true)
 				if err != nil {
 					store.logger.Error("unable to open message", zap.Error(err))
 					continue
 				}
+				elapsed := time.Since(start)
+				store.logger.Info(fmt.Sprintf("TIME: STORE OPEN MESSAGE TOOK %v", elapsed))
 
+				start = time.Now()
 				store.logger.Debug("store_message: received payload", zap.String("payload", string(messageEvent.Message)))
 				store.Emit(ctx, messageEvent)
+				elapsed = time.Since(start)
+				store.logger.Info(fmt.Sprintf("TIME: STORE EMIT TOOK %v", elapsed))
 			}
 		}()
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"berty.tech/berty/v2/go/pkg/errcode"
 	"berty.tech/berty/v2/go/pkg/protocoltypes"
@@ -11,6 +12,11 @@ import (
 )
 
 func (s *service) AppMetadataSend(ctx context.Context, req *protocoltypes.AppMetadataSend_Request) (*protocoltypes.AppMetadataSend_Reply, error) {
+	start := time.Now()
+	defer func() {
+		elapsed := time.Since(start)
+		s.logger.Info(fmt.Sprintf("TIME: APP META SEND %v", elapsed))
+	}()
 	ctx = tyber.ContextWithTraceID(ctx)
 	s.logger.Info(
 		fmt.Sprintf("Sending metadata to group %s", hex.EncodeToString(req.GroupPK)),
@@ -60,6 +66,11 @@ func (s *service) AppMetadataSend(ctx context.Context, req *protocoltypes.AppMet
 }
 
 func (s *service) AppMessageSend(ctx context.Context, req *protocoltypes.AppMessageSend_Request) (*protocoltypes.AppMessageSend_Reply, error) {
+	start := time.Now()
+	defer func() {
+		elapsed := time.Since(start)
+		s.logger.Info(fmt.Sprintf("TIME: APP MESS SEND %v", elapsed))
+	}()
 	ctx = tyber.ContextWithTraceID(ctx)
 	s.logger.Info(
 		fmt.Sprintf("Sending message to group %s", hex.EncodeToString(req.GroupPK)),
