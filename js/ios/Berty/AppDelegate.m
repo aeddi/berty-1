@@ -8,6 +8,7 @@
 #import <React/RCTLinkingManager.h> // needed for deep linking
 #import "Berty-Swift.h" // needed for swift
 #import <Firebase.h> // needed for crashlytics, TODO: remove this after closed beta / replace it by a more privacy compliant solution
+#import "Bertybridge/Bertybridge.h"
 #import "RNBootSplash.h" // needed by react-native-bootsplash
 // Done custom imports
 
@@ -73,19 +74,7 @@ static void InitializeFlipper(UIApplication *application) {
 
   UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
   center.delegate = self;
-
-  NSLog(@"LAUNCHED");
-  if (launchOptions != nil) {
-    NSLog(@"LAUNCHED WITH OPTIONS");
-    NSDictionary* dictionary = [launchOptions objectForKey:UIApplicationLaunchOptionsRemoteNotificationKey];
-    if (dictionary != nil) {
-      NSLog(@"LAUNCHED WITH DICT");
-      for (int i = 0; i < dictionary.allKeys.count; i++) {
-        NSLog(@"LAUNCHED WITH KEY: %@; VALUE: %@", dictionary.allKeys[i], dictionary.allValues[i]);
-      }
-    }
-  }
-
+  
   return YES;
 }
 
@@ -147,25 +136,29 @@ static void InitializeFlipper(UIApplication *application) {
   [[PushNotificationDriver getSharedInstance] onRequestFailed:error];
 }
 
+// Called when push notification was received in foreground
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler
 {
-  NSString *data = notification.request.content.userInfo[@"data"];
+  NSString *payload = notification.request.content.userInfo[@"data"];
   
-  if (data != nil) {
-    // laVie(data)
-    EventEmitter *eventEmiter = getEvent;
+  if (payload != nil) {
+    EventEmitter *eventEmitter = EventEmitter.shared;
+    if (eventEmitter != nil) {
+      // Send the payload to JS
+      [eventEmitter sendEventWithName:@"onPushReceived" body:payload];
+    }
   }
-  NSLog(@"TOTODEBUG willPresentNotification");
+  
+  // Ignore push notif from here, JS will decide to display it or not
   completionHandler(UNNotificationPresentationOptionNone);
 }
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void (^)(void))completionHandler
 {
-  // TODO: handle notification response
-  NSLog(@"TOTODEBUG RESPONSE");
-  for (int i = 0; i < response.notification.request.content.userInfo.allKeys.count; i++) {
-    NSLog(@"TOTODEBUG RESPONSE WITH KEY: %@; VALUE: %@ -\nLOL", response.notification.request.content.userInfo.allKeys[i], response.notification.request.content.userInfo.allValues[i]);
-  }
+  // if (<deeplink available in push notif>) {
+  //    openDeeplink()
+  // }
+  
   completionHandler();
 }
 

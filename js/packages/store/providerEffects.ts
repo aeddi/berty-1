@@ -132,7 +132,7 @@ export const initialLaunch = async (dispatch: (arg0: reducerAction) => void, emb
 					console.log('File deleted')
 				})
 				.catch(() => {
-					console.log('File berty backup does not exist')
+					console.log('File berty backup does not exist') // here
 				})
 			dispatch({ type: MessengerActions.SetNextAccount, payload: accountSelected.accountId })
 			return
@@ -258,6 +258,22 @@ export const openingClients = (
 	const messengerClient = Service(beapi.messenger.MessengerService, rpc, messengerMiddlewares)
 
 	const protocolClient = Service(beapi.protocol.ProtocolService, rpc, null)
+
+	// @gfanton: hardcode the token here'
+	const tokenSlice = Uint8Array.from([
+		/* <token */
+	])
+
+	protocolClient
+		.pushSetDeviceToken({
+			receiver: beapi.protocol.PushServiceReceiver.create({
+				tokenType: beapi.protocol.PushServiceTokenType.PushTokenApplePushNotificationService,
+				bundleId: 'tech.berty.ios',
+				token: tokenSlice,
+			}),
+		})
+		.then(() => console.info('Push Token registred'))
+		.catch(err => console.error('Push Token registration failed:', err))
 
 	let precancel = false
 	let cancel = () => {

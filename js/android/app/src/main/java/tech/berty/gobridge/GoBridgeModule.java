@@ -11,6 +11,8 @@ import com.facebook.react.bridge.ReadableArray;
 
 import java.io.File;
 
+import tech.berty.rootdir.RootDirModule;
+
 // go packages
 import bertybridge.PromiseBlock;
 import bertybridge.Bertybridge;
@@ -31,9 +33,9 @@ public class GoBridgeModule extends ReactContextBaseJavaModule {
   public GoBridgeModule(ReactApplicationContext reactContext) {
     super(reactContext);
     this.reactContext = reactContext;
-    rootDir = new File(reactContext.getFilesDir().getAbsolutePath() + "/berty");
+    rootDir = new File(new RootDirModule(reactContext).getRootDir());
     System.out.println("root dir: " + rootDir.getAbsolutePath());
-    tempDir = new File(reactContext.getCacheDir().getAbsolutePath() + "/berty");
+    tempDir = new File(reactContext.getCacheDir().getAbsolutePath());
     System.out.println("temp dir: " + tempDir.getAbsolutePath());
   }
 
