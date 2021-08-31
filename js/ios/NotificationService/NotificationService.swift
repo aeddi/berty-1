@@ -46,7 +46,7 @@ class NotificationService: UNNotificationServiceExtension {
     // TODO: implement display logic
     self.bestAttemptContent!.title = "Decrypted"
     self.bestAttemptContent!.subtitle = request.content.userInfo["data"] as! String
-    self.bestAttemptContent!.body = "\(decrypted!.accountName) \(decrypted!.accountID) \(decrypted!.memberDisplayName) \(decrypted!.payloadAttrsJSON)"
+    self.bestAttemptContent!.body = "\(decrypted.accountName) \(decrypted.accountID) \(decrypted.memberDisplayName) \(decrypted.payloadAttrsJSON)"
     contentHandler(self.bestAttemptContent!)
   }
 
