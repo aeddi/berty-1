@@ -2,6 +2,7 @@ import { EventEmitter } from 'events'
 import AsyncStorage from '@react-native-community/async-storage'
 import cloneDeep from 'lodash/cloneDeep'
 import RNFS from 'react-native-fs'
+import base64 from 'base64-js'
 
 import { bridge as rpcBridge, grpcweb as rpcWeb } from '@berty-tech/grpc-bridge/rpc'
 import beapi from '@berty-tech/api'
@@ -236,7 +237,7 @@ export const openingClients = (
 	eventEmitter: EventEmitter,
 	daemonAddress: string,
 	embedded: boolean,
-) => {
+): void => {
 	if (appState !== MessengerAppState.OpeningWaitingForClients) {
 		return
 	}
@@ -260,15 +261,21 @@ export const openingClients = (
 	const protocolClient = Service(beapi.protocol.ProtocolService, rpc, null)
 
 	// @gfanton: hardcode the token here'
-	const tokenSlice = Uint8Array.from([
-		/* <token */
-	])
+	const hextoken = ""
+	// const tokenSlice = new Uint8Array(base64.toByteArray(b64token))
+	// const tokenSlice = new TextEncoder("utf-8").encode("hextoken")
+
+
+	const tokenSlice = new Uint8Array(hextoken.length)
+	for (var i = 0; i < hextoken.length; i++) {
+		tokenSlice[i] = hextoken.charCodeAt(i)
+	}
 
 	protocolClient
 		.pushSetDeviceToken({
 			receiver: beapi.protocol.PushServiceReceiver.create({
 				tokenType: beapi.protocol.PushServiceTokenType.PushTokenApplePushNotificationService,
-				bundleId: 'tech.berty.ios',
+				bundleId: 'tech.berty.ios.debug',
 				token: tokenSlice,
 			}),
 		})

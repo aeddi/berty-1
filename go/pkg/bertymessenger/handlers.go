@@ -3,6 +3,7 @@ package bertymessenger
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strconv"
@@ -1508,7 +1509,7 @@ func (h *eventHandler) sharePushTokenForConversationInternal(account *mt.Account
 		return errcode.ErrInvalidInput.Wrap(fmt.Errorf("missing data in PushServiceReceiver"))
 	}
 
-	tokenIdentifier := makeSharedPushIdentifier(pushServer, pushToken) // TODO
+	tokenIdentifier := makeSharedPushIdentifier(pushServer, pushToken)
 
 	pubKey, err := b64DecodeBytes(conversation.PublicKey)
 	if err != nil {
@@ -1587,7 +1588,10 @@ func (h *eventHandler) sharePushTokenForConversation(conversation *mt.Conversati
 }
 
 func makeSharedPushIdentifier(server *protocoltypes.PushServer, token *protocoltypes.PushServiceReceiver) string {
-	return fmt.Sprintf("%s-%s", server.ServerKey, token.Token)
+	// @TODO(@gfanton): make something smarter here
+	b64serverKey := base64.StdEncoding.EncodeToString(server.ServerKey)
+	b64token := base64.StdEncoding.EncodeToString(token.Token)
+	return fmt.Sprintf("%s-%s", b64serverKey, b64token)
 }
 
 func (h *eventHandler) handleOutOfStoreAppMessage(groupPK []byte, message *protocoltypes.OutOfStoreMessage, payload []byte) (*mt.Interaction, error) {
