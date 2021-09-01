@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-community/async-storage'
 import cloneDeep from 'lodash/cloneDeep'
 import RNFS from 'react-native-fs'
 import base64 from 'base64-js'
+import { Platform } from 'react-native'
 
 import { bridge as rpcBridge, grpcweb as rpcWeb } from '@berty-tech/grpc-bridge/rpc'
 import beapi from '@berty-tech/api'
@@ -26,6 +27,9 @@ import {
 } from './context'
 import { ServiceClientType } from '@berty-tech/grpc-bridge/welsh-clients.gen'
 import i18n from '@berty-tech/berty-i18n'
+
+import { NativeModules } from 'react-native'
+const { PushTokenRequester } = NativeModules
 
 export const openAccountWithProgress = async (
 	dispatch: (arg0: reducerAction) => void,
@@ -260,27 +264,32 @@ export const openingClients = (
 
 	const protocolClient = Service(beapi.protocol.ProtocolService, rpc, null)
 
-	// @gfanton: hardcode the token here'
-	const hextoken = ""
-	// const tokenSlice = new Uint8Array(base64.toByteArray(b64token))
-	// const tokenSlice = new TextEncoder("utf-8").encode("hextoken")
-
-
-	const tokenSlice = new Uint8Array(hextoken.length)
-	for (var i = 0; i < hextoken.length; i++) {
-		tokenSlice[i] = hextoken.charCodeAt(i)
+	if (Platform.OS === 'ios' || Platform.OS === 'android') {
+		PushTokenRequester.request()
+			.then(responseJSON => {
+				let response = JSON.parse(responseJSON)
+				protocolClient
+					.pushSetDeviceToken({
+						receiver: beapi.protocol.PushServiceReceiver.create({
+							tokenType:
+								Platform.OS === 'ios'
+									? beapi.protocol.PushServiceTokenType.PushTokenApplePushNotificationService
+									: beapi.protocol.PushServiceTokenType.PushTokenFirebaseCloudMessaging,
+							bundleId: response.bundleId,
+							token: new Uint8Array(base64.toByteArray(response.token)),
+						}),
+					})
+					.then(() => {
+						console.info('Push Token registred:', responseJSON)
+					})
+					.catch(err => {
+						console.error('Push Token registration failed:', err)
+					})
+			})
+			.catch(err => {
+				console.log(err)
+			})
 	}
-
-	protocolClient
-		.pushSetDeviceToken({
-			receiver: beapi.protocol.PushServiceReceiver.create({
-				tokenType: beapi.protocol.PushServiceTokenType.PushTokenApplePushNotificationService,
-				bundleId: 'tech.berty.ios.debug',
-				token: tokenSlice,
-			}),
-		})
-		.then(() => console.info('Push Token registred'))
-		.catch(err => console.error('Push Token registration failed:', err))
 
 	let precancel = false
 	let cancel = () => {

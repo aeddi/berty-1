@@ -91,7 +91,6 @@ class GoBridge: NSObject {
             config.setLoggerDriver(LoggerDriver("tech.berty", "protocol"))
             config.setLifeCycleDriver(LifeCycleDriver.shared)
             config.setNotificationDriver(NotificationDriver.shared)
-            config.setPushNotificationDriver(PushNotificationDriver.shared)
             config.setTyberAddress(tyberHost)
 
             // @TODO(gfanton): make this dir in golang
