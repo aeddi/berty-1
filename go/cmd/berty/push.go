@@ -45,7 +45,10 @@ func pushServerCommand() *ffcli.Command {
 				return flag.ErrHelp
 			}
 
-			var err error
+			logger, err := manager.GetLogger()
+			if err != nil {
+				return err
+			}
 
 			if manager.Node.Protocol.AuthSecret == "" {
 				return fmt.Errorf("node.auth-secret cannot be empty")
@@ -70,7 +73,7 @@ func pushServerCommand() *ffcli.Command {
 			}
 
 			dispatchers := []bertyprotocol.PushDispatcher{}
-			apnsDispatchers, err := bertyprotocol.PushDispatcherLoadAPNSCertificates(apns)
+			apnsDispatchers, err := bertyprotocol.PushDispatcherLoadAPNSCertificates(logger, apns)
 			if err != nil {
 				return err
 			}
@@ -85,11 +88,6 @@ func pushServerCommand() *ffcli.Command {
 			dispatchers = append(dispatchers, fcmDispatchers...)
 
 			server, mux, err := manager.GetGRPCServer()
-			if err != nil {
-				return err
-			}
-
-			logger, err := manager.GetLogger()
 			if err != nil {
 				return err
 			}

@@ -242,7 +242,7 @@ func messageStoreAddMessage(ctx context.Context, g *protocoltypes.Group, md *own
 	return op, nil
 }
 
-func constructorFactoryGroupMessage(s *BertyOrbitDB) iface.StoreConstructor {
+func constructorFactoryGroupMessage(s *BertyOrbitDB, logger *zap.Logger) iface.StoreConstructor {
 	return func(ctx context.Context, ipfs coreapi.CoreAPI, identity *identityprovider.Identity, addr address.Address, options *iface.NewStoreOptions) (iface.Store, error) {
 		g, err := s.getGroupFromOptions(options)
 		if err != nil {
@@ -265,7 +265,7 @@ func constructorFactoryGroupMessage(s *BertyOrbitDB) iface.StoreConstructor {
 			devKS:  s.deviceKeystore,
 			mks:    s.messageKeystore,
 			g:      g,
-			logger: s.Logger(),
+			logger: logger,
 			cache:  make(map[string]*ring.Ring),
 		}
 

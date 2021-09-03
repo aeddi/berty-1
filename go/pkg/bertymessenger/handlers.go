@@ -229,6 +229,7 @@ func (h *eventHandler) accountServiceTokenAdded(gme *protocoltypes.GroupMetadata
 	if err := h.db.addServiceToken(b64EncodeBytes(config.AccountPK), ev.ServiceToken); err != nil {
 		return errcode.ErrDBWrite.Wrap(err)
 	}
+	h.logger.Info("WIP_LOG: service token added")
 
 	// dispatch event
 	if h.svc != nil {

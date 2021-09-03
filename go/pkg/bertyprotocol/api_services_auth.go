@@ -215,13 +215,15 @@ func (s *service) AuthServiceCompleteFlow(ctx context.Context, request *protocol
 		}
 
 		s.logger.Debug("registering PushServer")
-		client, err := s.createAndGetPushClient(ctx, service.ServiceEndpoint, svcToken.Token)
+		client, err := s.getPushClient(service.ServiceEndpoint)
 		if err != nil {
 			s.logger.Warn("unable to connect to push server", zap.String("endpoint", service.ServiceEndpoint), zap.Error(err))
 			continue
 		}
 
-		repl, err := client.ServerInfo(ctx, &protocoltypes.PushServiceServerInfo_Request{})
+		repl, err := client.ServerInfo(ctx, &protocoltypes.PushServiceServerInfo_Request{},
+			gRPCCredentialOption(svcToken.Token),
+		)
 		if err != nil {
 			s.logger.Warn("unable to get server info from push server", zap.String("endpoint", service.ServiceEndpoint), zap.Error(err))
 			continue

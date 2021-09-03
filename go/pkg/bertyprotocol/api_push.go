@@ -3,6 +3,7 @@ package bertyprotocol
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"sync"
 
@@ -18,27 +19,14 @@ import (
 )
 
 func (s *service) getPushClient(host string) (PushServiceClient, error) {
-	s.muPushClients.RLock()
-	defer s.muPushClients.RUnlock()
+	s.muPushClients.Lock()
+	defer s.muPushClients.Unlock()
 
 	if cc, ok := s.pushClients[host]; ok {
 		return NewPushServiceClient(cc), nil
 	}
 
-	return nil, fmt.Errorf("no grpc client registered for `%s`", host)
-}
-
-func (s *service) createAndGetPushClient(ctx context.Context, host string, token string) (PushServiceClient, error) {
-	s.muPushClients.Lock()
-	defer s.muPushClients.Unlock()
-
-	if cc, ok := s.pushClients[host]; ok {
-		cc.Close()
-		s.pushClients[host] = nil
-	}
-
-	cc, err := grpc.DialContext(ctx, host,
-		grpc.WithPerRPCCredentials(grpcutil.NewUnsecureSimpleAuthAccess("bearer", token)),
+	cc, err := grpc.Dial(host,
 		grpc.WithInsecure(), // @FIXME(gfanton): this is very insecure
 	)
 	if err != nil {
@@ -48,8 +36,8 @@ func (s *service) createAndGetPushClient(ctx context.Context, host string, token
 	// monitor push client state
 	go monitorPushServer(s.ctx, cc, s.logger)
 
-	s.pushClients[host] = cc
-	return NewPushServiceClient(cc), err
+	return NewPushServiceClient(cc), nil
+
 }
 
 func (s *service) PushReceive(ctx context.Context, request *protocoltypes.PushReceive_Request) (*protocoltypes.PushReceive_Reply, error) {
@@ -86,7 +74,14 @@ func (s *service) PushSend(ctx context.Context, request *protocoltypes.PushSend_
 	wg.Add(len(pushTargets))
 
 	for serverAddr, pushTokens := range pushTargets {
-		go func(serverAddr string, pushTokens []*protocoltypes.PushServiceOpaqueReceiver) {
+		// @FIXME(gfanton): find a better way to get service token
+		token, ok := s.accountGroup.metadataStore.getServiceTokenByEndpoint(serverAddr, ServicePushID)
+		if !ok {
+			s.logger.Warn("unable to send push - no service token found", zap.String("endoint", serverAddr))
+			continue
+		}
+
+		go func(serviceToken string, serverAddr string, pushTokens []*protocoltypes.PushServiceOpaqueReceiver) {
 			s.logger.Info("PushSend - pushing", zap.String("cid", c.String()), zap.String("server", serverAddr))
 			defer wg.Done()
 
@@ -101,15 +96,18 @@ func (s *service) PushSend(ctx context.Context, request *protocoltypes.PushSend_
 				return
 			}
 
-			if _, err := client.Send(ctx, &protocoltypes.PushServiceSend_Request{
+			_, err = client.Send(ctx, &protocoltypes.PushServiceSend_Request{
 				Envelope:  sealedMessageEnvelope,
 				Priority:  protocoltypes.PushPriorityNormal,
 				Receivers: pushTokens,
-			}); err != nil {
+			}, gRPCCredentialOption(serviceToken))
+			if err != nil {
 				s.logger.Error("error while dialing push server", zap.String("push-server", serverAddr), zap.Error(err))
 				return
 			}
-		}(serverAddr, pushTokens)
+
+			s.logger.Debug("send push notification successfully", zap.String("cid", c.String()), zap.String("endpoint", serverAddr))
+		}(token, serverAddr, pushTokens)
 	}
 
 	wg.Wait()
@@ -195,11 +193,14 @@ func (s *service) PushShareToken(ctx context.Context, request *protocoltypes.Pus
 	if _, err := gc.metadataStore.SendPushToken(ctx, token); err != nil {
 		return nil, err
 	}
+	s.logger.Debug("WIP_LOG: send push token done")
 
 	return &protocoltypes.PushShareToken_Reply{}, nil
 }
 
 func (s *service) PushSetDeviceToken(ctx context.Context, request *protocoltypes.PushSetDeviceToken_Request) (*protocoltypes.PushSetDeviceToken_Reply, error) {
+	s.logger.Debug("WIP_LOG: setting push device token", zap.String("token", hex.EncodeToString(request.Receiver.Token)))
+
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -216,6 +217,8 @@ func (s *service) PushSetDeviceToken(ctx context.Context, request *protocoltypes
 	if _, err := s.accountGroup.metadataStore.RegisterDevicePushToken(ctx, request.Receiver); err != nil {
 		return nil, errcode.ErrInternal.Wrap(err)
 	}
+
+	s.logger.Debug("WIP_LOG: push token device set", zap.Int("token len", len(request.Receiver.Token)))
 
 	return &protocoltypes.PushSetDeviceToken_Reply{}, nil
 }
@@ -258,4 +261,8 @@ func monitorPushServer(ctx context.Context, cc *grpc.ClientConn, logger *zap.Log
 			zap.String("target", cc.Target()),
 			zap.String("state", currentState.String()))
 	}
+}
+
+func gRPCCredentialOption(token string) grpc.CallOption {
+	return grpc.PerRPCCredentials(grpcutil.NewUnsecureSimpleAuthAccess("bearer", token))
 }

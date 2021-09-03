@@ -3,8 +3,10 @@ package bertyprotocol
 import (
 	"context"
 	crand "crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"go.uber.org/zap"
 	"golang.org/x/crypto/curve25519"
@@ -17,7 +19,7 @@ import (
 
 const (
 	ServicePushID         = "psh"
-	ServicePushPayloadKey = "p"
+	ServicePushPayloadKey = "data"
 	ServicePushPayloadMax = 4096 // FIXME: find an appropriate value
 )
 
@@ -67,34 +69,28 @@ func (d *pushService) Send(ctx context.Context, request *protocoltypes.PushServi
 	wg := sync.WaitGroup{}
 	wg.Add(len(request.Receivers))
 
-	subCtx, cancel := context.WithCancel(ctx)
-	errCh := make(chan error)
-
+	errCount := int32(0)
 	for i, receiver := range request.Receivers {
 		go func(i int, receiver *protocoltypes.PushServiceOpaqueReceiver) {
-			defer wg.Done()
-
 			if err := d.sendSingle(pushPayload, receiver); err != nil {
-				d.logger.Warn("unable to send a single push", zap.Error(err), zap.Int("index", i))
-				errCh <- err
-				return
+				d.logger.Warn("unable to send a push", zap.Int("index", i), zap.Error(err))
+				atomic.AddInt32(&errCount, 1)
+			} else {
+				secretToken := fmt.Sprintf("%.10s...", hex.EncodeToString(receiver.OpaqueToken))
+				d.logger.Debug("successfully send push notification", zap.Int("index", i), zap.String("target token", secretToken), zap.Error(err))
 			}
+
+			wg.Done()
 		}(i, receiver)
 	}
 
-	go func() {
-		wg.Wait()
-		cancel()
-	}()
+	wg.Wait()
 
-	select {
-	case <-subCtx.Done():
-		return &protocoltypes.PushServiceSend_Reply{}, nil
-
-	case err := <-errCh:
-		cancel()
-		return nil, err
+	if errCount > 0 {
+		return nil, fmt.Errorf("unable to send %d/%d push to receivers", errCount, len(request.Receivers))
 	}
+
+	return &protocoltypes.PushServiceSend_Reply{}, nil
 }
 
 func (d *pushService) decodeOpaqueReceiver(receiver *protocoltypes.PushServiceOpaqueReceiver) (*protocoltypes.PushServiceReceiver, error) {

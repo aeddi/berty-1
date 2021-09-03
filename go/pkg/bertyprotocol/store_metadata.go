@@ -66,7 +66,8 @@ func (m *metadataStore) setLogger(l *zap.Logger) {
 		return
 	}
 
-	m.logger = l.With(zap.String("group-id", fmt.Sprintf("%.6s", base64.StdEncoding.EncodeToString(m.g.PublicKey))))
+	// m.logger = l.Named("store").With(zap.String("group-id", fmt.Sprintf("%.6s", base64.StdEncoding.EncodeToString(m.g.PublicKey))))
+	m.logger = l.Named("metastore")
 
 	if index, ok := m.Index().(loggable); ok {
 		index.setLogger(m.logger)
@@ -946,6 +947,23 @@ func (m *metadataStore) listServiceTokens() []*protocoltypes.ServiceToken {
 	return m.Index().(*metadataStoreIndex).listServiceTokens()
 }
 
+func (m *metadataStore) getServiceTokenByEndpoint(endpoint string, serviceType string) (string, bool) {
+	serviceTokens := m.Index().(*metadataStoreIndex).listServiceTokens()
+	m.logger.Info("ServiceTokens", zap.Any("list", serviceTokens))
+	for _, st := range serviceTokens {
+		for _, ss := range st.SupportedServices {
+			if ss.ServiceType != serviceType {
+				continue
+			}
+
+			if ss.ServiceEndpoint == endpoint {
+				return st.Token, true
+			}
+		}
+	}
+	return "", false
+}
+
 func (m *metadataStore) getServiceToken(tokenID string) (*protocoltypes.ServiceToken, error) {
 	m.Index().(*metadataStoreIndex).lock.RLock()
 	defer m.Index().(*metadataStoreIndex).lock.RUnlock()
@@ -963,7 +981,7 @@ type EventMetadataReceived struct {
 	Event     proto.Message
 }
 
-func constructorFactoryGroupMetadata(s *BertyOrbitDB) iface.StoreConstructor {
+func constructorFactoryGroupMetadata(s *BertyOrbitDB, logger *zap.Logger) iface.StoreConstructor {
 	return func(ctx context.Context, ipfs coreapi.CoreAPI, identity *identityprovider.Identity, addr address.Address, options *iface.NewStoreOptions) (iface.Store, error) {
 		g, err := s.getGroupFromOptions(options)
 		if err != nil {
@@ -992,7 +1010,7 @@ func constructorFactoryGroupMetadata(s *BertyOrbitDB) iface.StoreConstructor {
 			g:      g,
 			mks:    s.messageKeystore,
 			devKS:  s.deviceKeystore,
-			logger: s.Logger(),
+			logger: logger,
 		}
 
 		if replication {
@@ -1056,7 +1074,7 @@ func constructorFactoryGroupMetadata(s *BertyOrbitDB) iface.StoreConstructor {
 		}
 
 		// Enable logs in the metadata index
-		store.setLogger(s.Logger())
+		store.setLogger(logger)
 
 		return store, nil
 	}
@@ -1080,6 +1098,7 @@ func newSecretEntryPayload(localDevicePrivKey crypto.PrivKey, remoteMemberPubKey
 }
 
 func (m *metadataStore) SendPushToken(ctx context.Context, t *protocoltypes.PushMemberTokenUpdate) (operation.Operation, error) {
+	m.logger.Debug("WIP_LOG: sending push token to device", zap.String("server", t.Server.ServiceAddr), zap.Int("token len", len(t.Token)))
 	return m.attributeSignAndAddEvent(ctx, &protocoltypes.PushMemberTokenUpdate{
 		Server: t.Server,
 		Token:  t.Token,
