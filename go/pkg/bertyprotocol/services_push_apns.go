@@ -2,6 +2,7 @@ package bertyprotocol
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -84,7 +85,7 @@ func (d *pushDispatcherAPNS) Dispatch(data []byte, receiver *protocoltypes.PushS
 	pushPayload.Custom(ServicePushPayloadKey, base64.RawURLEncoding.EncodeToString(data))
 	pushPayload.ContentAvailable()
 	notification := &apns2.Notification{}
-	notification.DeviceToken = string(receiver.Token)
+	notification.DeviceToken = hex.EncodeToString(receiver.Token)
 	notification.Topic = d.bundleID
 	notification.Payload = pushPayload
 
