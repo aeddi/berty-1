@@ -19,7 +19,8 @@ import (
 
 const (
 	ServicePushID         = "psh"
-	ServicePushPayloadKey = "data"
+	ServicePushPayloadKey = "data" // @TODO(gfanton): use shorter key (something like `d`)
+
 	ServicePushPayloadMax = 4096 // FIXME: find an appropriate value
 )
 

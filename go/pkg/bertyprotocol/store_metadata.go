@@ -4,6 +4,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -1098,7 +1099,7 @@ func newSecretEntryPayload(localDevicePrivKey crypto.PrivKey, remoteMemberPubKey
 }
 
 func (m *metadataStore) SendPushToken(ctx context.Context, t *protocoltypes.PushMemberTokenUpdate) (operation.Operation, error) {
-	m.logger.Debug("WIP_LOG: sending push token to device", zap.String("server", t.Server.ServiceAddr), zap.Int("token len", len(t.Token)))
+	m.logger.Debug("WIP_LOG: sending push token to device", zap.String("server", t.Server.ServiceAddr), zap.String("push token", hex.EncodeToString(t.Token)))
 	return m.attributeSignAndAddEvent(ctx, &protocoltypes.PushMemberTokenUpdate{
 		Server: t.Server,
 		Token:  t.Token,
@@ -1106,6 +1107,7 @@ func (m *metadataStore) SendPushToken(ctx context.Context, t *protocoltypes.Push
 }
 
 func (m *metadataStore) RegisterDevicePushToken(ctx context.Context, token *protocoltypes.PushServiceReceiver) (operation.Operation, error) {
+	m.logger.Debug("WIP_LOG: register push token", zap.String("push token", hex.EncodeToString(token.Token)))
 	return m.attributeSignAndAddEvent(ctx, &protocoltypes.PushDeviceTokenRegistered{
 		Token: token,
 	}, protocoltypes.EventTypePushDeviceTokenRegistered, nil)

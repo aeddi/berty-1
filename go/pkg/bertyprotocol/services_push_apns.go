@@ -90,8 +90,8 @@ func (d *pushDispatcherAPNS) Dispatch(data []byte, receiver *protocoltypes.PushS
 	pushPayload := payload.NewPayload()
 	pushPayload.Custom(ServicePushPayloadKey, base64.RawURLEncoding.EncodeToString(data))
 	pushPayload.MutableContent()
-	pushPayload.AlertBody("you just receive a message")
 	pushPayload.AlertTitle("New Message")
+	// @TODO(gfanton): maybe add a body message ?
 
 	notification := &apns2.Notification{}
 	notification.DeviceToken = token
