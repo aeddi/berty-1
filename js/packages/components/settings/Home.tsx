@@ -136,8 +136,8 @@ export const Home: ScreenFC<'Settings.Home'> = withInAppNotification(
 					config: newConfig,
 				})
 				showNotification({
-					title: 'README',
-					message: 'Change manually bluetooth and restart app',
+					title: t('notification.need-restart-ble.title'),
+					message: t('notification.need-restart-ble.desc'),
 					onPress: async () => {
 						await ctx.restart()
 					},
@@ -204,7 +204,7 @@ export const Home: ScreenFC<'Settings.Home'> = withInAppNotification(
 					*/}
 						<ButtonSettingV2
 							text={t('settings.home.appearance-button')}
-							icon='smile'
+							icon='eye'
 							onPress={() => navigate('Settings.Appearence')}
 						/>
 						{/*
