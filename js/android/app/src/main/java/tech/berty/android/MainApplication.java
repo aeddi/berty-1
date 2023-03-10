@@ -1,7 +1,6 @@
 package tech.berty.android;
 
 import android.app.Application;
-import android.content.Context;
 
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleObserver;
@@ -10,16 +9,16 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 
 import com.facebook.react.PackageList;
 import com.facebook.react.ReactApplication;
-import com.facebook.react.ReactInstanceManager;
 import com.facebook.react.ReactNativeHost;
 import com.facebook.react.ReactPackage;
+import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
+import com.facebook.react.defaults.DefaultReactNativeHost;
 import com.facebook.soloader.SoLoader;
 
 import android.content.res.Configuration;
 import expo.modules.ApplicationLifecycleDispatcher;
 import expo.modules.ReactNativeHostWrapper;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 
 import tech.berty.addressbook.AddressBookPackage;
@@ -40,7 +39,7 @@ public class MainApplication extends Application implements ReactApplication, Li
     private static AppState appState = AppState.Foreground;
 
     private final ReactNativeHost mReactNativeHost =
-        new ReactNativeHostWrapper(this, new ReactNativeHost(this) {
+        new ReactNativeHostWrapper(this, new DefaultReactNativeHost(this) {
             @Override
             public boolean getUseDeveloperSupport() {
                 return BuildConfig.DEBUG;
@@ -61,6 +60,16 @@ public class MainApplication extends Application implements ReactApplication, Li
             @Override
             protected String getJSMainModuleName() {
                 return "index";
+            }
+            
+            @Override
+            protected boolean isNewArchEnabled() {
+              return BuildConfig.IS_NEW_ARCHITECTURE_ENABLED;
+            }
+            
+            @Override
+            protected Boolean isHermesEnabled() {
+              return BuildConfig.IS_HERMES_ENABLED;
             }
         });
 
@@ -92,45 +101,17 @@ public class MainApplication extends Application implements ReactApplication, Li
         // init SoLoader
         SoLoader.init(this, /* native exopackage */ false);
 
-        // init flipper
-        initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
+        if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
+            // If you opted-in for the New Architecture, we load the native entry point for this app.
+            DefaultNewArchitectureEntryPoint.load();
+        }
+        ReactNativeFlipper.initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
 
         // register for lifecycle events
         ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
 
         // init expo
         ApplicationLifecycleDispatcher.onApplicationCreate(this);
-    }
-
-    /**
-     * Loads Flipper in React Native templates. Call this in the onCreate method with something like
-     * initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
-     *
-     * @param context
-     * @param reactInstanceManager
-     */
-    private static void initializeFlipper(
-        Context context, ReactInstanceManager reactInstanceManager) {
-        if (BuildConfig.DEBUG) {
-            try {
-        /*
-         We use reflection here to pick up the class that initializes Flipper,
-        since Flipper library is not available in release mode
-        */
-                Class<?> aClass = Class.forName("tech.berty.android.ReactNativeFlipper");
-                aClass
-                    .getMethod("initializeFlipper", Context.class, ReactInstanceManager.class)
-                    .invoke(null, context, reactInstanceManager);
-            } catch (ClassNotFoundException e) {
-                e.printStackTrace();
-            } catch (NoSuchMethodException e) {
-                e.printStackTrace();
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
-            } catch (InvocationTargetException e) {
-                e.printStackTrace();
-            }
-        }
     }
 
     @Override

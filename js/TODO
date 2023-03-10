@@ -1,0 +1,14 @@
+1. This file is problematic : https://react-native-community.github.io/upgrade-helper/?from=0.64.4&to=0.71.3#-dev-null-RnDiffApp-android-app-src-release-java-com-rndiffapp-ReactNativeFlipper.java
+Because we don't use a "release" folder, we merged everything in main
+
+2. This file should be used instead of the removed patches to use asdf node binary : https://react-native-community.github.io/upgrade-helper/?from=0.64.4&to=0.71.3#-dev-null-RnDiffApp-ios-.xcode.env
+
+3. This file will be complicated : https://react-native-community.github.io/upgrade-helper/?from=0.64.4&to=0.71.3#RnDiffApp-ios-RnDiffApp-AppDelegate.h
+
+4. This file will be complicated : https://react-native-community.github.io/upgrade-helper/?from=0.64.4&to=0.71.3#RnDiffApp-ios-RnDiffApp-AppDelegate.m-deleted
+
+5. In package.json we need to update android-v8 package
+
+6. In package.json we need to ensure that every package we update is still working on this new version
+
+7. All the changes made in this commit are untested

@@ -61,12 +61,12 @@ react {
  * use App Bundles (https://developer.android.com/guide/app-bundle/)
  * and want to have separate APKs to upload to the Play Store.
  */
-def enableSeparateBuildPerCPUArchitecture = false
+def enableSeparateBuildPerCPUArchitecture = true
 
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -92,17 +92,69 @@ def reactNativeArchitectures() {
 }
 
 android {
+    compileSdkVersion rootProject.ext.compileSdkVersion
+
     ndkVersion rootProject.ext.ndkVersion
 
     compileSdkVersion rootProject.ext.compileSdkVersion
 
-    namespace "com.rndiffapp"
+    namespace "tech.berty.android"
     defaultConfig {
-        applicationId "com.rndiffapp"
+        applicationId "tech.berty.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+
+        missingDimensionStrategy 'react-native-camera', 'general'
+        multiDexEnabled true // fix for "The number of method references in a .dex file cannot exceed 64K"
+        vectorDrawables.useSupportLibrary = true // needed for image picker
+
+        def addEnvVar = {key ->
+            def value = getEnvValue(key)
+            manifestPlaceholders += [(key):value]
+            buildConfigField "String", "${key}", "\"${value}\""
+        }
+
+        def generateVersionCode = {
+            def cwd = rootDir.getParentFile().getParentFile() // Berty repo root dir
+            def platform = System.properties['os.name'].toLowerCase().contains('windows') ? "Windows" : "Unix"
+            def err
+            try {
+                def proc = "${platform == "Windows" ? "PowerShell -Command" : ""} git rev-list HEAD --count".execute(null, cwd)
+                err = proc.err.text.trim()
+                def out = proc.text.trim()
+                if (!out.isEmpty()) {
+                    if (out.isInteger()) {
+                        return out.toInteger()
+                    }
+                    err = "can't convert version code to integer: <${out}>"
+                }
+            } catch (Exception e) {
+                err = e.toString()
+            }
+            throw new RuntimeException("Could not generate versionCode (platform ${platform}): ${err}")
+        }
+
+        def generateVersionName = {
+            def cwd = rootDir.getParentFile().getParentFile() // Berty repo root dir
+            def platform = System.properties['os.name'].toLowerCase().contains('windows') ? "Windows" : "Unix"
+            def err
+            try {
+                def proc = "${platform == "Windows" ? "PowerShell -Command" : ""} go run -mod=readonly github.com/mdomke/git-semver/v5".execute(null, cwd)
+                err = proc.err.text.trim()
+                def out = proc.text.trim()
+                if (!out.isEmpty()) {
+                    out = out.substring(1)
+                    out = out.split('-')[0]
+                    return out
+                }
+            } catch (Exception e) {
+                err = e.toString()
+            }
+            throw new RuntimeException("Could not generate versionName (platform ${platform}): ${err}")
+        }
+
+        versionCode generateVersionCode()
+        versionName generateVersionName()
     }
 
     splits {
@@ -123,17 +175,33 @@ android {
     }
     buildTypes {
         debug {
+            applicationIdSuffix ".debug"
             signingConfig signingConfigs.debug
+            buildConfigField "boolean", "DEBUG_LOGS", "true"
         }
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
             signingConfig signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            buildConfigField "boolean", "DEBUG_LOGS", "false"
+        }
+        releaseStaff {
+            initWith release
+            applicationIdSuffix ".staff"
+            matchingFallbacks = ['release']
+            buildConfigField "boolean", "DEBUG_LOGS", "true"
+        }
+        releaseYolo {
+            initWith release
+            applicationIdSuffix ".yolo"
+            matchingFallbacks = ['release']
+            buildConfigField "boolean", "DEBUG_LOGS", "true"
         }
     }
-
+    
     // applicationVariants are e.g. debug, release
     applicationVariants.all { variant ->
         variant.outputs.each { output ->
@@ -143,19 +211,73 @@ android {
             def versionCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
             def abi = output.getFilter(OutputFile.ABI)
             if (abi != null) {  // null for the universal-debug, universal-release variants
-                output.versionCodeOverride =
-                        defaultConfig.versionCode * 1000 + versionCodes.get(abi)
+                output.versionCodeOverride = defaultConfig.versionCode * 1000 + versionCodes.get(abi)
             }
 
+        }
+    }
+
+    packagingOptions {
+        // Make sure libjsc.so does not packed in APK
+        exclude "**/libjsc.so"
+    }
+}
+
+// Auto-build gomobile.aar by running Makefile rule
+task makeDeps(description: 'Build gomobile.aar (Berty go core)') {
+    outputs.files fileTree(dir: "${rootDir.getPath()}/libs", include: ["*.jar", "*.aar"])
+
+    doLast {
+        if (System.properties['os.name'].toLowerCase().contains('windows')) {
+            logger.warn("Warning: can't run make on Windows, you must build gomobile.aar manually")
+            return
+        }
+
+        def checkMakeInPath = exec {
+            standardOutput = new ByteArrayOutputStream() // equivalent to '> /dev/null'
+            ignoreExitValue = true
+            commandLine 'bash', '-l', '-c', 'command -v make'
+        }
+
+        if (checkMakeInPath.getExitValue() == 0) {
+            exec {
+                def makefileDir = "${rootDir.getPath()}/.."
+                workingDir makefileDir
+                environment 'PWD', makefileDir
+                commandLine 'make', 'android.app_deps'
+            }
+        } else {
+            logger.warn('Warning: make command not found in PATH')
         }
     }
 }
 
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
-    implementation("com.facebook.react:react-android")
+    implementation('com.facebook.react:react-android')
+
+    // firebase fcm
+    implementation platform('com.google.firebase:firebase-bom:28.1.0')
+    implementation('com.google.firebase:firebase-messaging')
+
+    // Add v8-android - prebuilt libv8android.so into APK
+    implementation('org.chromium:v8-android:9.88.+')
+
+    implementation('androidx.viewpager2:viewpager2:1.0.0')
+
+    implementation('com.facebook.fresco:animated-gif:2.0.0') // For animated GIF support
 
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.0.0")
+
+    implementation project(':react-native-share')
+
+    // Add Android Nearby
+    implementation('com.google.android.gms:play-services-nearby:16.0.0')
+    implementation('com.google.android.gms:play-services-location:17.0.0')
+    implementation('androidx.lifecycle:lifecycle-process:2.3.1')
+
+    // Add keystore, 1.1 is required to use the MasterKey class
+    implementation('androidx.security:security-crypto:1.1.0-alpha03')
 
     debugImplementation("com.facebook.flipper:flipper:${FLIPPER_VERSION}")
     debugImplementation("com.facebook.flipper:flipper-network-plugin:${FLIPPER_VERSION}") {
@@ -168,6 +290,15 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    implementation makeDeps.outputs.files
 }
 
-apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
+apply from: file('../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle'); applyNativeModulesAppBuildGradle(project)
+
+
+project.ext.vectoricons = [
+    iconFontNames: [ 'Feather.ttf' ] // Name of the font files you want to copy
+]
+
+apply from: '../../node_modules/react-native-vector-icons/fonts.gradle'
